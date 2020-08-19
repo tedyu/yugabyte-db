@@ -797,9 +797,11 @@ class TabletBootstrap {
       replay_state_->pending_replicates.erase(iter, replay_state_->pending_replicates.end());
     }
 
-    SCHECK(entry_metadata.entry_time != RestartSafeCoarseTimePoint(),
-           Corruption,
-           "Entry metadata must have a restart-safe time");
+    // We expect entry_metadata.entry_time to always be set for newly written WAL entries. However,
+    // for some very old WALs, it might be missing.
+    LOG_IF_WITH_PREFIX(DFATAL, entry_metadata.entry_time == RestartSafeCoarseTimePoint())
+        << "Entry metadata must have a restart-safe time. OpId: " << OpId::FromPB(replicate.id());
+
     CHECK(replay_state_->pending_replicates.emplace(
         op_id.index(), Entry{std::move(*replicate_entry_ptr), entry_metadata.entry_time}).second);
 
@@ -1297,10 +1299,10 @@ class TabletBootstrap {
         << "Number of orphaned replicates: " << consensus_info->orphaned_replicates.size()
         << ", last id: " << replay_state_->prev_op_id
         << ", commited id: " << replay_state_->committed_op_id;
-    CHECK(replay_state_->prev_op_id.term() >= replay_state_->committed_op_id.term() &&
-          replay_state_->prev_op_id.index() >= replay_state_->committed_op_id.index())
-        << LogPrefix() << "Last: " << replay_state_->prev_op_id.ShortDebugString()
-        << ", committed: " << replay_state_->committed_op_id;
+
+    SCHECK(replay_state_->prev_op_id.term() >= replay_state_->committed_op_id.term() &&
+           replay_state_->prev_op_id.index() >= replay_state_->committed_op_id.index(),
+           IllegalState, "WAL files missing, or committed op id is incorrect");
 
     tablet_->mvcc_manager()->SetLastReplicated(replay_state_->max_committed_hybrid_time);
     consensus_info->last_id = replay_state_->prev_op_id;
