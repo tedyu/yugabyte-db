@@ -45,7 +45,7 @@ FunctorThreadPoolTask<F, StrandTask>* MakeFunctorStrandTask(F&& f) {
 class Strand : public ThreadPoolTask {
  public:
   explicit Strand(ThreadPool* thread_pool);
-  virtual ~Strand() = default;
+  virtual ~Strand();
 
   void Enqueue(StrandTask* task);
 
@@ -62,6 +62,7 @@ class Strand : public ThreadPoolTask {
   void Shutdown();
 
  private:
+  void PerformShutdown();
   void Run() override;
 
   void Done(const Status& status) override;
