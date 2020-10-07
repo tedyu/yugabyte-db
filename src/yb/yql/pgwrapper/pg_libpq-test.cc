@@ -37,6 +37,10 @@ namespace yb {
 namespace pgwrapper {
 
 class PgLibPqTest : public LibPqTestBase {
+  void UpdateMiniClusterOptions(ExternalMiniClusterOptions* options) override {
+    // Disable one time system query cache
+    options->extra_tserver_flags.push_back("--cql_one_time_cache_retry_on_failure_delay_msecs=0");
+  }
  protected:
   void TestMultiBankAccount(IsolationLevel isolation);
 

@@ -45,6 +45,7 @@ using namespace yb::size_literals;
 
 DECLARE_bool(use_cassandra_authentication);
 DECLARE_int32(cql_update_system_query_cache_msecs);
+DECLARE_int32(cql_one_time_cache_retry_on_failure_delay_msecs);
 
 DEFINE_int64(cql_service_max_prepared_statement_size_bytes, 128_MB,
              "The maximum amount of memory the CQL proxy should use to maintain prepared "
@@ -139,7 +140,8 @@ CQLServiceImpl::CQLServiceImpl(CQLServer* server, const CQLServerOptions& opts)
       Substitute("SELECT $0, $1 FROM system_auth.roles WHERE role = ?",
                  kRoleColumnNameSaltedHash, kRoleColumnNameCanLogin));
 
-  if (FLAGS_cql_update_system_query_cache_msecs > 0) {
+  if (FLAGS_cql_update_system_query_cache_msecs > 0 ||
+      FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs > 0) {
     system_cache_ = std::make_shared<SystemQueryCache>(this);
   } else {
     VLOG(1) << "System query cache disabled.";

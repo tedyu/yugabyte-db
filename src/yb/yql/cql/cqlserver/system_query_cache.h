@@ -56,13 +56,17 @@ class SystemQueryCache {
 
  private:
     void InitializeQueries();
+    Status PerformQuery(std::string query,
+      const std::unique_ptr<std::unordered_map<std::string, RowsResult::SharedPtr>>& new_cache);
     void RefreshCache();
     void ScheduleRefreshCache(bool now);
     void ExecuteSync(const std::string& stmt, Status* status,
         ExecutedResult::SharedPtr* result_ptr);
 
     cqlserver::CQLServiceImpl* const service_impl_;
-    std::vector<std::string> queries_;
+    std::unordered_set<string> queries_;
+    std::unordered_set<string> one_time_queries_;
+    bool one_time_queries_cached_;
 
     std::unique_ptr<std::unordered_map<std::string, RowsResult::SharedPtr>> cache_
       GUARDED_BY(cache_mutex_);

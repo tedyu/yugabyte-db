@@ -75,6 +75,9 @@ static bool validate_tables(const char* flagname, const std::string& value) {
 
 DEFINE_int32(cql_update_system_query_cache_msecs, 0,
              "How often the system query cache should be updated. <= 0 disables caching.");
+DEFINE_int32(cql_one_time_cache_retry_on_failure_delay_msecs, 3000,
+             "If attempt to populate the one time cache fails, this flag controls the delay between"
+             " retries. A value <=0 disables caching.");
 DEFINE_int32(cql_system_query_cache_stale_msecs, 60000,
              "Maximum permitted staleness for the system query cache. "
              "<= 0 permits infinite staleness.");
@@ -118,7 +121,7 @@ const char* SYSTEM_QUERIES[] = {
 };
 
 SystemQueryCache::SystemQueryCache(cqlserver::CQLServiceImpl* service_impl)
-  : service_impl_(service_impl), stmt_params_() {
+  : service_impl_(service_impl), one_time_queries_cached_(), stmt_params_() {
 
   cache_ = std::make_unique<std::unordered_map<std::string, RowsResult::SharedPtr>>();
   last_updated_ = MonoTime::kMin;
@@ -129,16 +132,14 @@ SystemQueryCache::SystemQueryCache(cqlserver::CQLServiceImpl* service_impl)
 
   LOG(INFO) << "Created system query cache updater.";
 
-  if (FLAGS_cql_update_system_query_cache_msecs > 0) {
-    if (MonoDelta::FromMilliseconds(FLAGS_cql_system_query_cache_stale_msecs) <
-        MonoDelta::FromMilliseconds(FLAGS_cql_update_system_query_cache_msecs)) {
-      LOG(WARNING) << "Stale expiration shorter than update rate.";
-    }
+  // Fill in one time system queries.
+  one_time_queries_.insert("SELECT release_version FROM system.local");
 
-    ScheduleRefreshCache(false /* now */);
-  } else {
-    LOG(WARNING) << "System cache created with nonpositive timeout. Disabling scheduling";
+  if (MonoDelta::FromMilliseconds(FLAGS_cql_system_query_cache_stale_msecs) <
+      MonoDelta::FromMilliseconds(FLAGS_cql_update_system_query_cache_msecs)) {
+    LOG(WARNING) << "Stale expiration shorter than update rate.";
   }
+  ScheduleRefreshCache(false /* now */);
 }
 
 SystemQueryCache::~SystemQueryCache() {
@@ -151,7 +152,7 @@ SystemQueryCache::~SystemQueryCache() {
 
 void SystemQueryCache::InitializeQueries() {
   for (auto query : SYSTEM_QUERIES) {
-    queries_.push_back(query);
+    queries_.insert(query);
   }
 
   std::vector<QualifiedTable> table_pairs;
@@ -170,20 +171,29 @@ void SystemQueryCache::InitializeQueries() {
 
   for (auto pair : table_pairs) {
     for (auto format : formats) {
-      queries_.push_back(yb::Format(format, pair.keyspace, pair.table));
+      queries_.insert(yb::Format(format, pair.keyspace, pair.table));
     }
   }
 
 }
 
 boost::optional<RowsResult::SharedPtr> SystemQueryCache::Lookup(const std::string& query) {
+  std::string str = query;
+  if (str.back() == ';') {
+    str.pop_back();
+  }
+  auto iter = one_time_queries_.find(str);
   if (FLAGS_cql_system_query_cache_stale_msecs > 0 &&
-      GetStaleness() > MonoDelta::FromMilliseconds(FLAGS_cql_system_query_cache_stale_msecs)) {
+      GetStaleness() > MonoDelta::FromMilliseconds(FLAGS_cql_system_query_cache_stale_msecs) &&
+      (!one_time_queries_cached_ || iter == one_time_queries_.end())) {
+    return boost::none;
+  }
+  if (iter == one_time_queries_.end() && queries_.find(str) == queries_.end()) {
     return boost::none;
   }
   const std::lock_guard<std::mutex> l(cache_mutex_);
 
-  const auto it = cache_->find(query);
+  const auto it = cache_->find(str);
   if (it == cache_->end()) {
     return boost::none;
   } else {
@@ -196,29 +206,45 @@ MonoDelta SystemQueryCache::GetStaleness() {
   return MonoTime::Now() - last_updated_;
 }
 
+Status SystemQueryCache::PerformQuery(std::string query,
+        const std::unique_ptr<std::unordered_map<std::string, RowsResult::SharedPtr>>& new_cache) {
+  Status status;
+  ExecutedResult::SharedPtr result;
+  ExecuteSync(query, &status, &result);
+
+  if (status.ok()) {
+    auto rows_result = std::dynamic_pointer_cast<RowsResult>(result);
+    if (FLAGS_cql_system_query_cache_empty_responses ||
+        rows_result->GetRowBlock()->row_count() > 0) {
+      (*new_cache)[query] = rows_result;
+    } else {
+      LOG(INFO) << "Skipping empty result for statement: " << query;
+    }
+  } else {
+    LOG(WARNING) << "Could not execute statement: " << query;
+    // We don't want to update the cache with no data; instead we'll let the
+    // stale cache persist.
+    ScheduleRefreshCache(false /* now */);
+  }
+  return status;
+}
+
 void SystemQueryCache::RefreshCache() {
   VLOG(1) << "Refreshing system query cache";
   auto new_cache = std::make_unique<std::unordered_map<std::string, RowsResult::SharedPtr>>();
-  for (auto query : queries_) {
-    Status status;
-    ExecutedResult::SharedPtr result;
-    ExecuteSync(query, &status, &result);
-
-    if (status.ok()) {
-      auto rows_result = std::dynamic_pointer_cast<RowsResult>(result);
-      if (FLAGS_cql_system_query_cache_empty_responses ||
-          rows_result->GetRowBlock()->row_count() > 0) {
-        (*new_cache)[query] = rows_result;
-      } else {
-        LOG(INFO) << "Skipping empty result for statement: " << query;
-      }
-    } else {
-      LOG(WARNING) << "Could not execute statement: " << query;
-      // We don't want to update the cache with no data; instead we'll let the
-      // stale cache persist.
-      ScheduleRefreshCache(false /* now */);
-      return;
+  if (FLAGS_cql_update_system_query_cache_msecs > 0) {
+    for (auto query : queries_) {
+      auto status = PerformQuery(query, new_cache);
+      if (!status.ok()) return;
     }
+  }
+  if (FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs > 0 && !one_time_queries_cached_) {
+    for (auto it = one_time_queries_.begin(); it != one_time_queries_.end(); it++) {
+      auto status = PerformQuery(*it, new_cache);
+      if (!status.ok()) return;
+      LOG(INFO) << "Performed one time query: " << *it;
+    }
+    one_time_queries_cached_ = true;
   }
 
   {
@@ -227,7 +253,10 @@ void SystemQueryCache::RefreshCache() {
     last_updated_ = MonoTime::Now();
   }
 
-  ScheduleRefreshCache(false /* now */);
+  if (FLAGS_cql_update_system_query_cache_msecs > 0 ||
+     (FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs > 0 && !one_time_queries_cached_)) {
+    ScheduleRefreshCache(false /* now */);
+  }
 }
 
 void SystemQueryCache::ScheduleRefreshCache(bool now) {
@@ -235,13 +264,25 @@ void SystemQueryCache::ScheduleRefreshCache(bool now) {
   DCHECK(scheduler_);
   VLOG(1) << "Scheduling cache refresh";
 
+  int delay_msecs;
+  if (FLAGS_cql_update_system_query_cache_msecs == 0) {
+    // Enable query cache for one time system query.
+    delay_msecs = FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs;
+  } else if (one_time_queries_cached_ ||
+             FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs == 0) {
+    delay_msecs = FLAGS_cql_update_system_query_cache_msecs;
+  } else {
+    delay_msecs = std::min(FLAGS_cql_one_time_cache_retry_on_failure_delay_msecs,
+                           FLAGS_cql_update_system_query_cache_msecs);
+  }
+
   scheduler_->Schedule([this](const Status &s) {
       if (!s.ok()) {
         LOG(INFO) << "System cache updater scheduler was shutdown: " << s.ToString();
         return;
       }
       this->RefreshCache();
-      }, std::chrono::milliseconds(now ? 0 : FLAGS_cql_update_system_query_cache_msecs));
+      }, std::chrono::milliseconds(now ? 0 : delay_msecs));
 }
 
 void SystemQueryCache::ExecuteSync(const std::string& stmt, Status* status,
