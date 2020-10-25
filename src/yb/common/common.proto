@@ -371,13 +371,13 @@ message PartitionSchemaPB {
     // a component of the primary key.
     repeated ColumnIdentifierPB columns = 1;
 
-    // Split points for range tables.
-    repeated RangeSplitPB splits = 3;
-
     // Field "split_rows" is only available in beta version for SPLIT AT feature. This feature had
     // not been used, so the release version for SPLIT AT does not need to be compatible with
     // the beta version in the past releases.
     repeated bytes DEPRECATED_split_rows = 2;
+
+    // Split points for range tables.
+    repeated RangeSplitPB splits = 3;
   }
 
   message HashBucketSchemaPB {
