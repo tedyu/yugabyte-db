@@ -550,13 +550,13 @@ unique_ptr<CQLResponse> CQLProcessor::ProcessResult(const ExecutedResult::Shared
           const auto& req = down_cast<const AuthResponseRequest&>(*request_);
           const auto& params = req.params();
           const auto row_block = rows_result->GetRowBlock();
+          unique_ptr<CQLResponse> response = nullptr;
           if (row_block->row_count() != 1) {
-            return make_unique<ErrorResponse>(*request_, ErrorResponse::Code::SERVER_ERROR,
+            response = make_unique<ErrorResponse>(*request_, ErrorResponse::Code::SERVER_ERROR,
                                               "Could not get data for " + params.username);
           } else {
             const auto& row = row_block->row(0);
             const auto& schema = row_block->schema();
-            unique_ptr<CQLResponse> response = nullptr;
 
             const QLValue& salted_hash_value =
                 row.column(schema.find_column(kRoleColumnNameSaltedHash));
@@ -585,16 +585,15 @@ unique_ptr<CQLResponse> CQLProcessor::ProcessResult(const ExecutedResult::Shared
               }
             }
 
-            // FIXME: Logged twice, with different ports!
-            Status s = audit_logger_.LogAuthResponse(*response);
-            if (!s.ok()) {
-              return make_unique<ErrorResponse>(*request_, ErrorResponse::Code::SERVER_ERROR,
-                                                "Failed to write an audit log record");
-            }
-
-            return response;
           }
-          break;
+          // FIXME: Logged twice, with different ports!
+          Status s = audit_logger_.LogAuthResponse(*response);
+          if (!s.ok()) {
+            return make_unique<ErrorResponse>(*request_, ErrorResponse::Code::SERVER_ERROR,
+                                              "Failed to write an audit log record");
+          }
+
+          return response;
         }
         case CQLMessage::Opcode::ERROR:   FALLTHROUGH_INTENDED;
         case CQLMessage::Opcode::STARTUP: FALLTHROUGH_INTENDED;
