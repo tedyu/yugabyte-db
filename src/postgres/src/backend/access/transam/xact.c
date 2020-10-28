@@ -4192,12 +4192,12 @@ ReleaseSavepoint(const char *name)
 	xact = CurrentTransactionState;
 	for (;;)
 	{
+		Assert(PointerIsValid(xact));
 		Assert(xact->blockState == TBLOCK_SUBINPROGRESS);
 		xact->blockState = TBLOCK_SUBRELEASE;
 		if (xact == target)
 			break;
 		xact = xact->parent;
-		Assert(PointerIsValid(xact));
 	}
 }
 
@@ -4303,6 +4303,7 @@ RollbackToSavepoint(const char *name)
 	{
 		if (xact == target)
 			break;
+		Assert(PointerIsValid(xact));
 		if (xact->blockState == TBLOCK_SUBINPROGRESS)
 			xact->blockState = TBLOCK_SUBABORT_PENDING;
 		else if (xact->blockState == TBLOCK_SUBABORT)
@@ -4311,7 +4312,6 @@ RollbackToSavepoint(const char *name)
 			elog(FATAL, "RollbackToSavepoint: unexpected state %s",
 				 BlockStateAsString(xact->blockState));
 		xact = xact->parent;
-		Assert(PointerIsValid(xact));
 	}
 
 	/* And mark the target as "restart pending" */

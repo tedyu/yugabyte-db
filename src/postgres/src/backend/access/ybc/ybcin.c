@@ -302,13 +302,13 @@ ybcingettuple(IndexScanDesc scan, ScanDirection dir)
 	const bool is_forward_scan = (dir == ForwardScanDirection);
 
 	YbScanDesc ybscan = (YbScanDesc) scan->opaque;
+	Assert(PointerIsValid(ybscan));
 	ybscan->exec_params = scan->yb_exec_params;
 	if (!ybscan->exec_params) {
 		ereport(DEBUG1, (errmsg("null exec_params")));
 	} else {
 		ybscan->exec_params->read_from_followers = YBReadFromFollowersEnabled();
 	}
-	Assert(PointerIsValid(ybscan));
 
 	/*
 	 * IndexScan(SysTable, Index) --> HeapTuple.
