@@ -397,7 +397,7 @@ inv_getsize(LargeObjectDesc *obj_desc)
 				BTEqualStrategyNumber, F_OIDEQ,
 				ObjectIdGetDatum(obj_desc->id));
 
-	sd = systable_beginscan_ordered(lo_heap_r, lo_index_r,
+	sd = systable_beginscan(lo_heap_r, lo_index_r->rd_id, true /* indexOK */,
 									obj_desc->snapshot, 1, skey);
 
 	/*
@@ -406,7 +406,7 @@ inv_getsize(LargeObjectDesc *obj_desc)
 	 * large object in reverse pageno order.  So, it's sufficient to examine
 	 * the first valid tuple (== last valid page).
 	 */
-	tuple = systable_getnext_ordered(sd, BackwardScanDirection);
+	tuple = systable_getnext(sd);
 	if (HeapTupleIsValid(tuple))
 	{
 		Form_pg_largeobject data;
@@ -423,7 +423,7 @@ inv_getsize(LargeObjectDesc *obj_desc)
 			pfree(datafield);
 	}
 
-	systable_endscan_ordered(sd);
+	systable_endscan(sd);
 
 	return lastbyte;
 }
@@ -527,10 +527,10 @@ inv_read(LargeObjectDesc *obj_desc, char *buf, int nbytes)
 				BTGreaterEqualStrategyNumber, F_INT4GE,
 				Int32GetDatum(pageno));
 
-	sd = systable_beginscan_ordered(lo_heap_r, lo_index_r,
+	sd = systable_beginscan(lo_heap_r, lo_index_r->rd_id, true /* indexOK */,
 									obj_desc->snapshot, 2, skey);
 
-	while ((tuple = systable_getnext_ordered(sd, ForwardScanDirection)) != NULL)
+	while ((tuple = systable_getnext(sd)) != NULL)
 	{
 		Form_pg_largeobject data;
 		bytea	   *datafield;
@@ -578,7 +578,7 @@ inv_read(LargeObjectDesc *obj_desc, char *buf, int nbytes)
 			break;
 	}
 
-	systable_endscan_ordered(sd);
+	systable_endscan(sd);
 
 	return nread;
 }
@@ -647,7 +647,7 @@ inv_write(LargeObjectDesc *obj_desc, const char *buf, int nbytes)
 				BTGreaterEqualStrategyNumber, F_INT4GE,
 				Int32GetDatum(pageno));
 
-	sd = systable_beginscan_ordered(lo_heap_r, lo_index_r,
+	sd = systable_beginscan(lo_heap_r, lo_index_r->rd_id, true /* indexOK */,
 									obj_desc->snapshot, 2, skey);
 
 	oldtuple = NULL;
@@ -662,7 +662,7 @@ inv_write(LargeObjectDesc *obj_desc, const char *buf, int nbytes)
 		 */
 		if (neednextpage)
 		{
-			if ((oldtuple = systable_getnext_ordered(sd, ForwardScanDirection)) != NULL)
+			if ((oldtuple = systable_getnext(sd)) != NULL)
 			{
 				if (HeapTupleHasNulls(oldtuple))	/* paranoia */
 					elog(ERROR, "null field found in pg_largeobject");
@@ -767,7 +767,7 @@ inv_write(LargeObjectDesc *obj_desc, const char *buf, int nbytes)
 		pageno++;
 	}
 
-	systable_endscan_ordered(sd);
+	systable_endscan(sd);
 
 	CatalogCloseIndexes(indstate);
 
@@ -840,7 +840,7 @@ inv_truncate(LargeObjectDesc *obj_desc, int64 len)
 				BTGreaterEqualStrategyNumber, F_INT4GE,
 				Int32GetDatum(pageno));
 
-	sd = systable_beginscan_ordered(lo_heap_r, lo_index_r,
+	sd = systable_beginscan(lo_heap_r, lo_index_r->rd_id, true /* indexOK */,
 									obj_desc->snapshot, 2, skey);
 
 	/*
@@ -848,7 +848,7 @@ inv_truncate(LargeObjectDesc *obj_desc, int64 len)
 	 * point may be beyond the end of the LO or in a hole.
 	 */
 	olddata = NULL;
-	if ((oldtuple = systable_getnext_ordered(sd, ForwardScanDirection)) != NULL)
+	if ((oldtuple = systable_getnext(sd)) != NULL)
 	{
 		if (HeapTupleHasNulls(oldtuple))	/* paranoia */
 			elog(ERROR, "null field found in pg_largeobject");
@@ -941,13 +941,13 @@ inv_truncate(LargeObjectDesc *obj_desc, int64 len)
 	 */
 	if (olddata != NULL)
 	{
-		while ((oldtuple = systable_getnext_ordered(sd, ForwardScanDirection)) != NULL)
+		while ((oldtuple = systable_getnext(sd)) != NULL)
 		{
 			CatalogTupleDelete(lo_heap_r, oldtuple);
 		}
 	}
 
-	systable_endscan_ordered(sd);
+	systable_endscan(sd);
 
 	CatalogCloseIndexes(indstate);
 
