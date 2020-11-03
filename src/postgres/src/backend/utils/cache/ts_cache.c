@@ -483,10 +483,10 @@ lookup_ts_config_cache(Oid cfgId)
 
 		maprel = heap_open(TSConfigMapRelationId, AccessShareLock);
 		mapidx = index_open(TSConfigMapIndexId, AccessShareLock);
-		mapscan = systable_beginscan_ordered(maprel, mapidx,
+		mapscan = systable_beginscan(maprel, mapidx->rd_id, true /* indexOK */,
 											 NULL, 1, &mapskey);
 
-		while ((maptup = systable_getnext_ordered(mapscan, ForwardScanDirection)) != NULL)
+		while ((maptup = systable_getnext(mapscan)) != NULL)
 		{
 			Form_pg_ts_config_map cfgmap = (Form_pg_ts_config_map) GETSTRUCT(maptup);
 			int			toktype = cfgmap->maptokentype;
@@ -520,7 +520,7 @@ lookup_ts_config_cache(Oid cfgId)
 			}
 		}
 
-		systable_endscan_ordered(mapscan);
+		systable_endscan(mapscan);
 		index_close(mapidx, AccessShareLock);
 		heap_close(maprel, AccessShareLock);
 
