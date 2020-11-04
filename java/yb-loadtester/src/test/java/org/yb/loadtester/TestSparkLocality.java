@@ -37,6 +37,12 @@ public class TestSparkLocality extends BaseCQLTest {
 
   private static final int ROWS_COUNT = 1000;
 
+  protected Map<String, String> getTServerFlags() {
+    Map<String, String> flagMap = super.getTServerFlags();
+    flagMap.remove("cql_update_system_query_cache_msecs");
+    return flagMap;
+  }
+
   @Test
   public void testDefaultRun() throws Exception {
     // Set up config.
