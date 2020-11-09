@@ -1220,9 +1220,9 @@ Result<uint64_t> PgApiImpl::GetSharedCatalogVersion() {
 }
 
 // Transaction Control -----------------------------------------------------------------------------
-Status PgApiImpl::BeginTransaction() {
+Status PgApiImpl::BeginTransaction(bool follower_read) {
   pg_session_->InvalidateForeignKeyReferenceCache();
-  return pg_txn_manager_->BeginTransaction();
+  return pg_txn_manager_->BeginTransaction(follower_read);
 }
 
 Status PgApiImpl::RecreateTransaction() {

@@ -415,7 +415,7 @@ YBCStatus YBCPgSetForwardScan(YBCPgStatement handle, bool is_forward_scan);
 YBCStatus YBCPgExecSelect(YBCPgStatement handle, const YBCPgExecParameters *exec_params);
 
 // Transaction control -----------------------------------------------------------------------------
-YBCStatus YBCPgBeginTransaction();
+YBCStatus YBCPgBeginTransaction(bool follower_read);
 YBCStatus YBCPgRecreateTransaction();
 YBCStatus YBCPgRestartTransaction();
 YBCStatus YBCPgCommitTransaction();

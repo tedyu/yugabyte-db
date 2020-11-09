@@ -52,7 +52,7 @@ class PgTxnManager : public RefCountedThreadSafe<PgTxnManager> {
 
   virtual ~PgTxnManager();
 
-  CHECKED_STATUS BeginTransaction();
+  CHECKED_STATUS BeginTransaction(bool follower_read);
   CHECKED_STATUS RecreateTransaction();
   CHECKED_STATUS RestartTransaction();
   CHECKED_STATUS CommitTransaction();
@@ -79,8 +79,8 @@ class PgTxnManager : public RefCountedThreadSafe<PgTxnManager> {
 
   client::TransactionManager* GetOrCreateTransactionManager();
   void ResetTxnAndSession();
-  void StartNewSession();
-  Status RecreateTransaction(SavePriority save_priority);
+  void StartNewSession(bool follower_read);
+  Status RecreateTransaction(SavePriority save_priority, bool follower_read);
 
   uint64_t GetPriority(NeedsPessimisticLocking needs_pessimistic_locking);
 

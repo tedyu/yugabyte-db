@@ -109,7 +109,8 @@ class Batcher : public RefCountedThreadSafe<Batcher> {
           const YBSessionPtr& session,
           YBTransactionPtr transaction,
           ConsistentReadPoint* read_point,
-          bool force_consistent_read);
+          bool force_consistent_read,
+          bool follower_read);
 
   // Abort the current batch. Any writes that were buffered and not yet sent are
   // discarded. Those that were sent may still be delivered.  If there is a pending Flush
@@ -319,6 +320,8 @@ class Batcher : public RefCountedThreadSafe<Batcher> {
 
   // Force consistent read on transactional table, even we have only single shard commands.
   ForceConsistentRead force_consistent_read_;
+
+  bool follower_read_;
 
   RejectionScoreSourcePtr rejection_score_source_;
 

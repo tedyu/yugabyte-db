@@ -1875,7 +1875,7 @@ YBInitializeTransaction(void)
 {
 	if (YBTransactionsEnabled())
 	{
-		YBCPgBeginTransaction();
+		YBCPgBeginTransaction(YBReadFromFollowersEnabled());
 		YBCPgSetTransactionIsolationLevel(XactIsoLevel);
 		YBCPgSetTransactionReadOnly(XactReadOnly);
 		YBCPgSetTransactionDeferrable(XactDeferrable);

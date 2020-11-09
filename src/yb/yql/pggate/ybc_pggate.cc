@@ -779,8 +779,8 @@ YBCStatus YBCPgOperatorAppendArg(YBCPgExpr op_handle, YBCPgExpr arg) {
 // Transaction operation.
 //------------------------------------------------------------------------------------------------
 
-YBCStatus YBCPgBeginTransaction() {
-  return ToYBCStatus(pgapi->BeginTransaction());
+YBCStatus YBCPgBeginTransaction(bool follower_read) {
+  return ToYBCStatus(pgapi->BeginTransaction(follower_read));
 }
 
 YBCStatus YBCPgRecreateTransaction() {

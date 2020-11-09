@@ -197,7 +197,7 @@ internal::Batcher& YBSession::Batcher() {
   if (!batcher_) {
     batcher_.reset(new internal::Batcher(
         client_, error_collector_.get(), shared_from_this(), transaction_, read_point(),
-        force_consistent_read_));
+        force_consistent_read_, follower_read_));
     if (timeout_.Initialized()) {
       batcher_->SetTimeout(timeout_);
     }
@@ -276,6 +276,10 @@ int YBSession::CountPendingErrors() const {
 
 CollectedErrors YBSession::GetPendingErrors() {
   return error_collector_->GetErrors();
+}
+
+void YBSession::SetFollowerRead(bool value) {
+  follower_read_ = value;
 }
 
 void YBSession::SetForceConsistentRead(ForceConsistentRead value) {

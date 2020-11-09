@@ -137,6 +137,9 @@ DEFINE_int32(num_concurrent_backfills_allowed, 8,
 
 DEFINE_test_flag(bool, tserver_noop_read_write, false, "Respond NOOP to read/write.");
 
+DEFINE_test_flag(bool, consistent_prefix_read_without_read_time, false,
+                 "Consistent prefix read request shouldn't have read time.");
+
 DEFINE_int32(max_stale_read_bound_time_ms, 60000, "If we are allowed to read from followers, "
              "specify the maximum time a follower can be behind by using the last message received "
              "from the leader. If set to zero, a read can be served by a follower regardless of "
@@ -1911,7 +1914,8 @@ void TabletServiceImpl::Read(const ReadRequestPB* req,
 
   if (req->consistency_level() == YBConsistencyLevel::CONSISTENT_PREFIX) {
     auto tablet = down_cast<Tablet*>(read_context.tablet.get());
-    if (tablet) {
+    if (tablet && (!FLAGS_TEST_consistent_prefix_read_without_read_time ||
+      !req->has_read_time())) {
       tablet->metrics()->consistent_prefix_read_requests->Increment();
     }
   }

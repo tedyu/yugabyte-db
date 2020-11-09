@@ -238,6 +238,9 @@ class YBSession : public std::enable_shared_from_this<YBSession> {
   // It is useful when whole statement is executed using multiple flushes.
   void SetForceConsistentRead(ForceConsistentRead value);
 
+  // Sets read from follower mode
+  void SetFollowerRead(bool value);
+
   const internal::AsyncRpcMetricsPtr& async_rpc_metrics() const {
     return async_rpc_metrics_;
   }
@@ -262,6 +265,7 @@ class YBSession : public std::enable_shared_from_this<YBSession> {
   YBTransactionPtr transaction_;
   bool allow_local_calls_in_curr_thread_ = true;
   bool force_consistent_read_ = false;
+  bool follower_read_ = false;
 
   // Lock protecting flushed_batchers_.
   mutable simple_spinlock lock_;

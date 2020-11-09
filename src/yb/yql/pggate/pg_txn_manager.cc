@@ -99,12 +99,12 @@ PgTxnManager::~PgTxnManager() {
   ResetTxnAndSession();
 }
 
-Status PgTxnManager::BeginTransaction() {
+Status PgTxnManager::BeginTransaction(bool follower_read) {
   VLOG(2) << "BeginTransaction: txn_in_progress_=" << txn_in_progress_;
   if (txn_in_progress_) {
     return STATUS(IllegalState, "Transaction is already in progress");
   }
-  return RecreateTransaction(SavePriority::kFalse /* save_priority */);
+  return RecreateTransaction(SavePriority::kFalse /* save_priority */, follower_read);
 }
 
 Status PgTxnManager::RecreateTransaction() {
@@ -112,10 +112,10 @@ Status PgTxnManager::RecreateTransaction() {
   if (!txn_) {
     return Status::OK();
   }
-  return RecreateTransaction(SavePriority::kTrue /* save_priority */);
+  return RecreateTransaction(SavePriority::kTrue /* save_priority */, false /* follower_read */);
 }
 
-Status PgTxnManager::RecreateTransaction(const SavePriority save_priority) {
+Status PgTxnManager::RecreateTransaction(const SavePriority save_priority, bool follower_read) {
   use_saved_priority_ = save_priority;
   if (save_priority) {
     saved_priority_ = txn_->GetPriority();
@@ -123,7 +123,7 @@ Status PgTxnManager::RecreateTransaction(const SavePriority save_priority) {
 
   ResetTxnAndSession();
   txn_in_progress_ = true;
-  StartNewSession();
+  StartNewSession(follower_read);
   return Status::OK();
 }
 
@@ -142,10 +142,14 @@ Status PgTxnManager::SetDeferrable(bool deferrable) {
   return Status::OK();
 }
 
-void PgTxnManager::StartNewSession() {
+void PgTxnManager::StartNewSession(bool follower_read) {
   session_ = std::make_shared<YBSession>(async_client_init_->client(), clock_);
   session_->SetReadPoint(client::Restart::kFalse);
-  session_->SetForceConsistentRead(client::ForceConsistentRead::kTrue);
+  if (!follower_read) {
+    session_->SetForceConsistentRead(client::ForceConsistentRead::kTrue);
+  } else {
+    session_->SetFollowerRead(true);
+  }
 }
 
 uint64_t PgTxnManager::GetPriority(const NeedsPessimisticLocking needs_pessimistic_locking) {
@@ -305,7 +309,7 @@ Result<client::YBSession*> PgTxnManager::GetTransactionalSession() {
     return ddl_session_.get();
   }
   if (!txn_in_progress_) {
-    RETURN_NOT_OK(BeginTransaction());
+    RETURN_NOT_OK(BeginTransaction(false));
   }
   VLOG(2) << "Using the non-DDL transactional session: " << session_.get();
   return session_.get();

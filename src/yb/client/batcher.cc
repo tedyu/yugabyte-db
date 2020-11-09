@@ -112,7 +112,8 @@ Batcher::Batcher(YBClient* client,
                  const YBSessionPtr& session,
                  YBTransactionPtr transaction,
                  ConsistentReadPoint* read_point,
-                 bool force_consistent_read)
+                 bool force_consistent_read,
+                 bool follower_read)
   : client_(client),
     weak_session_(session),
     error_collector_(error_collector),
@@ -120,7 +121,8 @@ Batcher::Batcher(YBClient* client,
     async_rpc_metrics_(session->async_rpc_metrics()),
     transaction_(std::move(transaction)),
     read_point_(read_point),
-    force_consistent_read_(force_consistent_read) {
+    force_consistent_read_(force_consistent_read),
+    follower_read_(follower_read) {
 }
 
 void Batcher::Abort(const Status& status) {
@@ -573,7 +575,8 @@ void Batcher::ExecuteOperations(Initial initial) {
 
   // Now flush the ops for each group.
   // Consistent read is not required when whole batch fits into one command.
-  const auto need_consistent_read = force_consistent_read || ops_info_.groups.size() > 1;
+  const auto need_consistent_read = !follower_read_ &&
+    (force_consistent_read || ops_info_.groups.size() > 1);
 
   for (const auto& group : ops_info_.groups) {
     // Allow local calls for last group only.

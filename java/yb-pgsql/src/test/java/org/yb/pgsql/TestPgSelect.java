@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -37,6 +38,12 @@ import static org.yb.AssertionWrappers.*;
 @RunWith(value=YBTestRunnerNonTsanOnly.class)
 public class TestPgSelect extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestPgSelect.class);
+
+  protected Map<String, String> getTServerFlags() {
+    Map<String, String> flagMap = super.getTServerFlags();
+    flagMap.put("TEST_consistent_prefix_read_without_read_time", "true");
+    return flagMap;
+  }
 
   @Test
   public void testWhereClause() throws Exception {
