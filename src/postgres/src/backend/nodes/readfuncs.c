@@ -2364,7 +2364,13 @@ _readPartitionedRelPruneInfo(void)
 {
 	READ_LOCALS(PartitionedRelPruneInfo);
 
-	READ_OID_FIELD(reloid);
+	token = pg_strtok(&length);
+	if (strncmp(":rtindex", token, length) == 0) {
+		token = pg_strtok(&length);
+		local_node->rtindex = atoi(token);
+	} else if (strncmp(":reloid", token, length) == 0) {
+		local_node->rtindex = 0;
+	}
 	READ_NODE_FIELD(pruning_steps);
 	READ_BITMAPSET_FIELD(present_parts);
 	READ_INT_FIELD(nparts);
