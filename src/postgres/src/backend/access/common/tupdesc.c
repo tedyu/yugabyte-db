@@ -338,8 +338,14 @@ FreeTupleDesc(TupleDesc tupdesc)
 			for (i = tupdesc->natts - 1; i >= 0; i--)
 			{
 				if (attrmiss[i].am_present
-					&& !TupleDescAttr(tupdesc, i)->attbyval)
-					pfree(DatumGetPointer(attrmiss[i].am_value));
+					&& !TupleDescAttr(tupdesc, i)->attbyval) {
+						if (attrmiss[i].am_value) {
+							pfree(DatumGetPointer(attrmiss[i].am_value));
+						} else {
+							elog(LOG, "got NULL am_value for type %d",
+							TupleDescAttr(tupdesc, i)->atttypid);
+						}
+					}
 			}
 			pfree(attrmiss);
 		}
