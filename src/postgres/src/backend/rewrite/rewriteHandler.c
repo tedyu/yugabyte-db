@@ -92,13 +92,14 @@ static Bitmapset *adjust_view_column_set(Bitmapset *cols,
  * AcquireRewriteLocks -
  *	  Acquire suitable locks on all the relations mentioned in the Query.
  *	  These locks will ensure that the relation schemas don't change under us
- *	  while we are rewriting and planning the query.
+ *	  while we are rewriting, planning, and executing the query.
  *
- * forExecute indicates that the query is about to be executed.
- * If so, we'll acquire RowExclusiveLock on the query's resultRelation,
- * RowShareLock on any relation accessed FOR [KEY] UPDATE/SHARE, and
- * AccessShareLock on all other relations mentioned.
+ * Caution: this may modify the querytree, therefore caller should usually
+ * have done a copyObject() to make a writable copy of the querytree in the
+ * current memory context.
  *
+ * forExecute indicates that the query is about to be executed.  If so,
+ * we'll acquire the lock modes specified in the RTE rellockmode fields.
  * If forExecute is false, AccessShareLock is acquired on all relations.
  * This case is suitable for ruleutils.c, for example, where we only need
  * schema stability and we don't intend to actually modify any relations.
@@ -106,13 +107,11 @@ static Bitmapset *adjust_view_column_set(Bitmapset *cols,
  * forUpdatePushedDown indicates that a pushed-down FOR [KEY] UPDATE/SHARE
  * applies to the current subquery, requiring all rels to be opened with at
  * least RowShareLock.  This should always be false at the top of the
- * recursion.  This flag is ignored if forExecute is false.
+ * recursion.  When it is true, we adjust RTE rellockmode fields to reflect
+ * the higher lock level.  This flag is ignored if forExecute is false.
  *
  * A secondary purpose of this routine is to fix up JOIN RTE references to
- * dropped columns (see details below).  Because the RTEs are modified in
- * place, it is generally appropriate for the caller of this routine to have
- * first done a copyObject() to make a writable copy of the querytree in the
- * current memory context.
+ * dropped columns (see details below).  Such RTEs are modified in-place.
  *
  * This processing can, and for efficiency's sake should, be skipped when the
  * querytree has just been built by the parser: parse analysis already got
@@ -165,21 +164,24 @@ AcquireRewriteLocks(Query *parsetree,
 
 				/*
 				 * Grab the appropriate lock type for the relation, and do not
-				 * release it until end of transaction. This protects the
-				 * rewriter and planner against schema changes mid-query.
+				 * release it until end of transaction.  This protects the
+				 * rewriter, planner, and executor against schema changes
+				 * mid-query.
 				 *
-				 * Assuming forExecute is true, this logic must match what the
-				 * executor will do, else we risk lock-upgrade deadlocks.
+				 * If forExecute is false, ignore rellockmode and just use
+				 * AccessShareLock.
 				 */
 				if (!forExecute)
 					lockmode = AccessShareLock;
-				else if (rt_index == parsetree->resultRelation)
-					lockmode = RowExclusiveLock;
-				else if (forUpdatePushedDown ||
-						 get_parse_rowmark(parsetree, rt_index) != NULL)
-					lockmode = RowShareLock;
+				else if (forUpdatePushedDown)
+				{
+					/* Upgrade RTE's lock mode to reflect pushed-down lock */
+					if (rte->rellockmode == AccessShareLock)
+						rte->rellockmode = RowShareLock;
+					lockmode = rte->rellockmode;
+				}
 				else
-					lockmode = AccessShareLock;
+					lockmode = rte->rellockmode;
 
 				rel = heap_open(rte->relid, lockmode);
 
@@ -1627,6 +1629,7 @@ ApplyRetrieveRule(Query *parsetree,
 
 	rte->rtekind = RTE_SUBQUERY;
 	rte->relid = InvalidOid;
+	rte->rellockmode = 0;
 	rte->security_barrier = RelationIsSecurityView(relation);
 	rte->subquery = rule_action;
 	rte->inh = false;			/* must not be set for a subquery */
@@ -2961,8 +2964,14 @@ rewriteTargetView(Query *parsetree, Relation view)
 	 * very much like what the planner would do to "pull up" the view into the
 	 * outer query.  Perhaps someday we should refactor things enough so that
 	 * we can share code with the planner.)
+	 *
+	 * Be sure to set rellockmode to the correct thing for the target table.
+	 * Since we copied the whole viewquery above, we can just scribble on
+	 * base_rte instead of copying it.
 	 */
-	new_rte = (RangeTblEntry *) base_rte;
+	new_rte = base_rte;
+	new_rte->rellockmode = RowExclusiveLock;
+
 	parsetree->rtable = lappend(parsetree->rtable, new_rte);
 	new_rt_index = list_length(parsetree->rtable);
 
@@ -3146,8 +3155,8 @@ rewriteTargetView(Query *parsetree, Relation view)
 
 		new_exclRte = addRangeTableEntryForRelation(make_parsestate(NULL),
 													base_rel,
-													makeAlias("excluded",
-															  NIL),
+													RowExclusiveLock,
+													makeAlias("excluded", NIL),
 													false, false);
 		new_exclRte->relkind = RELKIND_COMPOSITE_TYPE;
 		new_exclRte->requiredPerms = 0;

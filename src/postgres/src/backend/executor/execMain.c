@@ -856,6 +856,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 			Relation	resultRelation;
 
 			resultRelationOid = getrelid(resultRelationIndex, rangeTable);
+			Assert(rt_fetch(resultRelationIndex, rangeTable)->rellockmode == RowExclusiveLock);
 			resultRelation = heap_open(resultRelationOid, RowExclusiveLock);
 
 			InitResultRelInfo(resultRelInfo,
@@ -896,6 +897,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 				Relation	resultRelDesc;
 
 				resultRelOid = getrelid(resultRelIndex, rangeTable);
+				Assert(rt_fetch(resultRelIndex, rangeTable)->rellockmode == RowExclusiveLock);
 				resultRelDesc = heap_open(resultRelOid, RowExclusiveLock);
 				InitResultRelInfo(resultRelInfo,
 								  resultRelDesc,
@@ -916,8 +918,11 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 				/* We locked the roots above. */
 				if (!list_member_int(plannedstmt->rootResultRelations,
 									 resultRelIndex))
+				{
+					Assert(rt_fetch(resultRelIndex, rangeTable)->rellockmode == RowExclusiveLock);
 					LockRelationOid(getrelid(resultRelIndex, rangeTable),
 									RowExclusiveLock);
+				}
 			}
 		}
 	}
@@ -947,6 +952,7 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 	{
 		PlanRowMark *rc = (PlanRowMark *) lfirst(l);
 		Oid			relid;
+		LOCKMODE	rellockmode;
 		Relation	relation;
 		ExecRowMark *erm;
 
@@ -957,20 +963,15 @@ InitPlan(QueryDesc *queryDesc, int eflags)
 		/* get relation's OID (will produce InvalidOid if subquery) */
 		relid = getrelid(rc->rti, rangeTable);
 
-		/*
-		 * If you change the conditions under which rel locks are acquired
-		 * here, be sure to adjust ExecOpenScanRelation to match.
-		 */
 		switch (rc->markType)
 		{
 			case ROW_MARK_EXCLUSIVE:
 			case ROW_MARK_NOKEYEXCLUSIVE:
 			case ROW_MARK_SHARE:
 			case ROW_MARK_KEYSHARE:
-				relation = heap_open(relid, RowShareLock);
-				break;
 			case ROW_MARK_REFERENCE:
-				relation = heap_open(relid, AccessShareLock);
+				rellockmode = rt_fetch(rc->rti, rangeTable)->rellockmode;
+				relation = heap_open(relid, rellockmode);
 				break;
 			case ROW_MARK_COPY:
 				/* no physical table access is required */

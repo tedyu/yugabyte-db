@@ -656,10 +656,6 @@ ExecRelationIsTargetRelation(EState *estate, Index scanrelid)
  *
  *		Open the heap relation to be scanned by a base-level scan plan node.
  *		This should be called during the node's ExecInit routine.
- *
- * By default, this acquires AccessShareLock on the relation.  However,
- * if the relation was already locked by InitPlan, we don't need to acquire
- * any additional lock.  This saves trips to the shared lock manager.
  * ----------------------------------------------------------------
  */
 Relation
@@ -669,25 +665,9 @@ ExecOpenScanRelation(EState *estate, Index scanrelid, int eflags)
 	Oid			reloid;
 	LOCKMODE	lockmode;
 
-	/*
-	 * Determine the lock type we need.  First, scan to see if target relation
-	 * is a result relation.  If not, check if it's a FOR UPDATE/FOR SHARE
-	 * relation.  In either of those cases, we got the lock already.
-	 */
-	lockmode = AccessShareLock;
-	if (ExecRelationIsTargetRelation(estate, scanrelid))
-		lockmode = NoLock;
-	else
-	{
-		/* Keep this check in sync with InitPlan! */
-		ExecRowMark *erm = ExecFindRowMark(estate, scanrelid, true);
-
-		if (erm != NULL && erm->relation != NULL)
-			lockmode = NoLock;
-	}
-
 	/* Open the relation and acquire lock as needed */
 	reloid = getrelid(scanrelid, estate->es_range_table);
+	lockmode = rt_fetch(scanrelid, estate->es_range_table)->rellockmode;
 	rel = heap_open(reloid, lockmode);
 
 	/*
@@ -915,6 +895,7 @@ ExecLockNonLeafAppendTables(List *partitioned_rels, EState *estate)
 		if (!is_result_rel)
 		{
 			PlanRowMark *rc = NULL;
+			LOCKMODE	lockmode;
 
 			foreach(l, stmt->rowMarks)
 			{
@@ -926,9 +907,13 @@ ExecLockNonLeafAppendTables(List *partitioned_rels, EState *estate)
 			}
 
 			if (rc && RowMarkRequiresRowShareLock(rc->markType))
-				LockRelationOid(relid, RowShareLock);
+				lockmode = RowShareLock;
 			else
-				LockRelationOid(relid, AccessShareLock);
+				lockmode = AccessShareLock;
+
+			Assert(lockmode == rt_fetch(rti, estate->es_range_table)->rellockmode);
+
+			LockRelationOid(relid, lockmode);
 		}
 	}
 }

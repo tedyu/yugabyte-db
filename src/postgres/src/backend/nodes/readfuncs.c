@@ -1351,7 +1351,16 @@ _readRangeTblEntry(void)
 		case RTE_RELATION:
 			READ_OID_FIELD(relid);
 			READ_CHAR_FIELD(relkind);
-			READ_NODE_FIELD(tablesample);
+			token = pg_strtok(&length);
+			if (strncmp(":rellockmode", token, length) == 0) {
+				token = pg_strtok(&length);
+				local_node->rellockmode = atoi(token);
+				READ_NODE_FIELD(tablesample);
+			} else if (strncmp(":tablesample", token, length) == 0) {
+				/* Old version of DB, use AccessShareLock as lock mode */
+				local_node->rellockmode = AccessShareLock;
+				local_node->tablesample = nodeRead(NULL, 0);
+			}
 			break;
 		case RTE_SUBQUERY:
 			READ_NODE_FIELD(subquery);
