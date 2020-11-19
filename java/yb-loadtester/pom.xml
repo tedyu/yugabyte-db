@@ -92,11 +92,6 @@
       <groupId>org.postgresql</groupId>
       <artifactId>postgresql</artifactId>
     </dependency>
-    <dependency>
-      <groupId>com.yugabyte</groupId>
-      <artifactId>yb-sample-apps</artifactId>
-      <version>1.0.9</version>
-    </dependency>
   </dependencies>
 
   <build>
