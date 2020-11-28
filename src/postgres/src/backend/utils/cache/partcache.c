@@ -775,6 +775,7 @@ RelationBuildPartitionDesc(Relation rel)
 	}
 
 	MemoryContextSwitchTo(oldcxt);
+	MemoryContextSetParent(rel->rd_pdcxt, CacheMemoryContext);
 	rel->rd_partdesc = result;
 }
 
