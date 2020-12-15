@@ -2682,6 +2682,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 	if (!*no_row_trigger)
 	{
 		RelationClose(relation);
+		list_free(subpath_tlist);
 		return false;
 	}
 
@@ -2694,6 +2695,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 	if (!*no_index_update)
 	{
 		RelationClose(relation);
+		list_free(subpath_tlist);
 		return false;
 	}
 
@@ -2701,6 +2703,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 	if (!IsA(index_path, IndexPath))
 	{
 		RelationClose(relation);
+		list_free(subpath_tlist);
 		return false;
 	}
 
@@ -2712,6 +2715,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (!list_member_ptr(index_path->indexquals, rinfo))
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 	}
@@ -2731,6 +2735,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (!IsA(clause, OpExpr))
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 
@@ -2738,6 +2743,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (!OidIsValid(clause_op))
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 
@@ -2747,6 +2753,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (op_strategy != BTEqualStrategyNumber)
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 	}
@@ -2773,6 +2780,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (!IsA(clause, OpExpr))
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 
@@ -2783,6 +2791,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 		if (!YBCIsSupportedSingleRowModifyWhereExpr(expr))
 		{
 			RelationClose(relation);
+			list_free(subpath_tlist);
 			return false;
 		}
 
@@ -2826,6 +2835,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 				bms_is_member(attr, pushdown_update_attrs))
 			{
 				RelationClose(relation);
+				list_free(subpath_tlist);
 				return false;
 			}
 		}
@@ -2837,6 +2847,7 @@ yb_single_row_update_or_delete_path(PlannerInfo *root,
 	if (!YBCAllPrimaryKeysProvided(relation, primary_key_attrs))
 	{
 		RelationClose(relation);
+		list_free(subpath_tlist);
 		return false;
 	}
 
