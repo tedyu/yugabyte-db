@@ -141,6 +141,12 @@ CREATE TABLE testjsonb (
        j jsonb
 );
 
+CREATE TABLE array_index_op_test (
+	seqno		int4,
+	i			int4[],
+	t			text[]
+);
+
 -- TODO(jason): uncomment when issue #1975 is closed or closing.
 -- CREATE TABLE unknowntab (
 -- 	u unknown    -- fail

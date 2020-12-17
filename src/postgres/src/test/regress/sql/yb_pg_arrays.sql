@@ -704,3 +704,24 @@ SELECT width_bucket(5, '{}');
 SELECT width_bucket('5'::text, ARRAY[3, 4]::integer[]);
 SELECT width_bucket(5, ARRAY[3, 4, NULL]);
 SELECT width_bucket(5, ARRAY[ARRAY[1, 2], ARRAY[3, 4]]);
+
+-- index on array
+create table int1(k int primary key, arr int[]);
+create index i1 on int1(arr);
+insert into int1 select s, array[s*s, s] FROM generate_series(1, 10) AS s;
+select * from int1 where arr @> array[3];
+select * from int1 where arr @> array[12];
+
+create table text1(k int primary key, arr text[]);
+create index i2 on text1(arr);
+
+create table sint1(k int primary key, arr smallint[]);
+create index s1 on sint1(arr);
+insert into sint1 select s, array[s*s, s] FROM generate_series(1, 10) AS s;
+select * from sint1 where arr @> array[4]::smallint[];
+
+insert into text1 values(1, array['foo', 'bar']);
+insert into text1 values(3, array['y', 'x']);
+select * from text1 where arr @> array['bar'];
+select * from text1 where arr = array['foo','bar'];
+select * from text1 where arr @> array['barz'];

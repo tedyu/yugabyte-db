@@ -795,7 +795,7 @@ static const YBCPgTypeEntity YBCTypeEntityTable[] = {
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
-	{ INT2ARRAYOID, YB_YQL_DATA_TYPE_BINARY, false, -1,
+	{ INT2ARRAYOID, YB_YQL_DATA_TYPE_BINARY, true, -1,
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
@@ -803,7 +803,7 @@ static const YBCPgTypeEntity YBCTypeEntityTable[] = {
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
-	{ INT4ARRAYOID, YB_YQL_DATA_TYPE_BINARY, false, -1,
+	{ INT4ARRAYOID, YB_YQL_DATA_TYPE_BINARY, true, -1,
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
@@ -811,7 +811,7 @@ static const YBCPgTypeEntity YBCTypeEntityTable[] = {
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
-	{ TEXTARRAYOID, YB_YQL_DATA_TYPE_BINARY, false, -1,
+	{ TEXTARRAYOID, YB_YQL_DATA_TYPE_BINARY, true, -1,
 		(YBCPgDatumToData)YBCDatumToBinary,
 		(YBCPgDatumFromData)YBCBinaryToDatum },
 
