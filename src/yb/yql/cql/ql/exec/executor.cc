@@ -68,6 +68,9 @@ using strings::Substitute;
   } while (false)
 
 //--------------------------------------------------------------------------------------------------
+DEFINE_bool(ycql_serial_operation_in_transaction_block, true,
+            "If true, operations within a transaction block must be executed in order, "
+            "at least semantically speaking.");
 
 Executor::Executor(QLEnv* ql_env, AuditLogger* audit_logger, Rescheduler* rescheduler,
                    const QLMetrics* ql_metrics)
@@ -1816,7 +1819,7 @@ Result<bool> Executor::ProcessTnodeResults(TnodeContext* tnode_context) {
     // Apply any op that has not been applied and executed.
     if (!op->response().has_status()) {
       DCHECK_EQ(op->type(), YBOperation::Type::QL_WRITE);
-      if (write_batch_.Add(std::static_pointer_cast<YBqlWriteOp>(op))) {
+      if (write_batch_.Add(std::static_pointer_cast<YBqlWriteOp>(op), exec_context_)) {
         YBSessionPtr session = GetSession(exec_context_);
         TRACE("Apply");
         RETURN_NOT_OK(session->Apply(op));
@@ -2129,7 +2132,15 @@ Status Executor::AddIndexWriteOps(const PTDmlStmt *tnode,
 
 //--------------------------------------------------------------------------------------------------
 
-bool Executor::WriteBatch::Add(const YBqlWriteOpPtr& op) {
+bool Executor::WriteBatch::Add(const YBqlWriteOpPtr& op, const ExecContext* exec_context) {
+  if (FLAGS_ycql_serial_operation_in_transaction_block && exec_context &&
+      exec_context->HasTransaction()) {
+    if (Empty()) {
+      ops_by_primary_key_.insert(op);
+      return true;
+    }
+    return false;
+  }
   // Checks if the write operation reads the primary/static row and if another operation that writes
   // the primary/static row by the same primary/hash key already exists.
   if ((op->ReadsPrimaryRow() && ops_by_primary_key_.count(op) > 0) ||
@@ -2139,6 +2150,7 @@ bool Executor::WriteBatch::Add(const YBqlWriteOpPtr& op) {
 
   if (op->WritesPrimaryRow()) { ops_by_primary_key_.insert(op); }
   if (op->WritesStaticRow()) { ops_by_hash_key_.insert(op); }
+
   return true;
 }
 
@@ -2175,7 +2187,7 @@ Status Executor::AddOperation(const YBqlWriteOpPtr& op, TnodeContext *tnode_cont
   // Check for inter-dependency in the current write batch before applying the write operation.
   // Apply it in the transactional session in exec_context for the current statement if there is
   // one. Otherwise, apply to the non-transactional session in the executor.
-  if (write_batch_.Add(op)) {
+  if (write_batch_.Add(op, exec_context_)) {
     YBSessionPtr session = GetSession(exec_context_);
     TRACE("Apply");
     RETURN_NOT_OK(session->Apply(op));

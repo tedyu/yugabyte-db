@@ -22,6 +22,7 @@ import static org.yb.AssertionWrappers.assertTrue;
 
 import com.datastax.driver.core.Row;
 import com.datastax.driver.core.PreparedStatement;
+import com.datastax.driver.core.ResultSet;
 import com.datastax.driver.core.ResultSetFuture;
 
 import org.yb.YBTestRunner;
@@ -273,6 +274,79 @@ public class TestTransaction extends BaseCQLTest {
     runInvalidStmt("begin transaction" +
                    "  insert into test_txn1 (k, c1, c2) values (?, ?, ?) if not exists;" +
                    "end transaction;");
+  }
+
+  String setupUserInsertAfterDelete(String newUser, String newNumber) {
+    session.execute("create table user (user_id text, phone_number text, primary key (user_id)) " +
+                    "with transactions = {'enabled' : true};");
+    session.execute("create unique index test_unique on user (phone_number);");
+
+    String insert = "begin transaction";
+    insert += " insert into user (user_id, phone_number) values ('A', '22-11');";
+    insert += " insert into user (user_id, phone_number) values ('C', '22-44');";
+    insert += "end transaction;";
+    session.execute(insert);
+
+    insert = "begin transaction";
+    insert += " delete from user where user_id='C' if exists else error;";
+    insert += " insert into user (user_id, phone_number) values ('C', '22-44') "
+           + "if not exists else error;";
+    insert += " delete from user where user_id='A' if exists else error;";
+    insert += " insert into user (user_id, phone_number) values ('" + newUser + "', '"
+           + newNumber + "') " + "if not exists else error;";
+    insert += "end transaction;";
+    return insert;
+  }
+
+  @Test
+  public void testUserInsertAfterDeleteErrorCase() throws Exception {
+    try {
+      destroyMiniCluster();
+      List<List<String>> tserverArgs = new ArrayList<>();
+      for (int i = 0; i < NUM_TABLET_SERVERS; i++) {
+        tserverArgs.add(Arrays.asList("--ycql_serial_operation_in_transaction_block=false"));
+      }
+      createMiniCluster(NUM_MASTERS, tserverArgs);
+      setUpCqlClient();
+
+      String insert = setupUserInsertAfterDelete("A", "22-11");
+      thrown.expect(com.datastax.driver.core.exceptions.InvalidQueryException.class);
+      thrown.expectMessage("Execution Error. Condition on table user was not satisfied.");
+      session.execute(insert);
+    } finally {
+      // Destroy the recreated cluster when done.
+      destroyMiniCluster();
+    }
+  }
+
+  @Test
+  public void testUserInsertAfterDelete() throws Exception {
+    String insert = setupUserInsertAfterDelete("A", "22-11");
+    session.execute(insert);
+
+    String select = "select user_id, phone_number from user";
+    ResultSet rs = session.execute(select);
+    List<Row> rows = rs.all();
+    assertEquals("Wrong number of rows", 2, rows.size());
+    Row r0 = rows.get(0);
+    assertEquals("Wrong value", "A", r0.getString("user_id"));
+    assertEquals("Wrong value", "22-11", r0.getString("phone_number"));
+  }
+
+  @Test
+  public void testUserInsertAfterDeleteDiffNumber() throws Exception {
+    String newUser = "B";
+    String newNumber = "22-13";
+    String insert = setupUserInsertAfterDelete(newUser, newNumber);
+    session.execute(insert);
+
+    String select = "select user_id, phone_number from user";
+    ResultSet rs = session.execute(select);
+    List<Row> rows = rs.all();
+    assertEquals("Wrong number of rows", 2, rows.size());
+    Row r0 = rows.get(1);
+    assertEquals("Wrong value", newUser, r0.getString("user_id"));
+    assertEquals("Wrong value", newNumber, r0.getString("phone_number"));
   }
 
   @Test
