@@ -21,6 +21,8 @@
   amprocrighttype => 'bit', amprocnum => '1', amproc => 'bitcmp' },
 { amprocfamily => 'btree/bool_ops', amproclefttype => 'bool',
   amprocrighttype => 'bool', amprocnum => '1', amproc => 'btboolcmp' },
+{ amprocfamily => 'btree/bool_ops', amproclefttype => 'bool',
+  amprocrighttype => 'bool', amprocnum => '2', amproc => 'btboolcmp' },
 { amprocfamily => 'btree/bpchar_ops', amproclefttype => 'bpchar',
   amprocrighttype => 'bpchar', amprocnum => '1', amproc => 'bpcharcmp' },
 { amprocfamily => 'btree/bpchar_ops', amproclefttype => 'bpchar',
