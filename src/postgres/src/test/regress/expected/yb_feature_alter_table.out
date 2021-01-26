@@ -835,3 +835,95 @@ Indexes:
     "test_alter_column_type_with_index_a_idx" lsm (a HASH)
 
 DROP TABLE test_alter_column_type_with_index;
+CREATE TABLE tenk1 (
+  unique1    int4,
+  unique2    int4,
+  two      int4,
+  four    int4,
+  ten      int4,
+  twenty    int4,
+  hundred    int4,
+  thousand  int4,
+  twothousand  int4,
+  fivethous  int4,
+  tenthous  int4,
+  odd      int4,
+  even    int4,
+  stringu1  name,
+  stringu2  name,
+  string4    name
+);
+-- Clean up in case a prior regression run failed
+SET client_min_messages TO 'warning';
+DROP ROLE IF EXISTS regress_alter_table_user1;
+RESET client_min_messages;
+CREATE USER regress_alter_table_user1;
+-- renaming views
+CREATE VIEW attmp_view (unique1) AS SELECT unique1 FROM tenk1;
+ALTER TABLE attmp_view RENAME TO attmp_view_new;
+SET ROLE regress_alter_table_user1;
+ALTER VIEW attmp_view_new RENAME TO fail;  -- permission denied
+ERROR:  must be owner of view attmp_view_new
+RESET ROLE;
+--
+CREATE ROLE regress_alice;
+CREATE FUNCTION f_leak (text)
+       RETURNS bool LANGUAGE 'plpgsql' COST 0.0000001
+       AS 'BEGIN RAISE NOTICE ''f_leak => %'', $1; RETURN true; END';
+CREATE TABLE customer (
+       cid      int primary key,
+       name     text not null,
+       tel      text,
+       passwd	text
+);
+CREATE VIEW my_property_normal AS
+       SELECT * FROM customer WHERE name = current_user;
+CREATE VIEW my_property_secure WITH (security_barrier) AS
+       SELECT * FROM customer WHERE name = current_user;
+GRANT SELECT ON my_property_normal TO public;
+GRANT SELECT ON my_property_secure TO public;
+--
+-- Test for the case when security_barrier gets changed between rewriter
+-- and planner stage.
+--
+PREPARE p1 AS SELECT * FROM my_property_normal WHERE f_leak(passwd);
+PREPARE p2 AS SELECT * FROM my_property_secure WHERE f_leak(passwd);
+EXECUTE p1;
+ cid | name | tel | passwd
+-----+------+-----+--------
+(0 rows)
+
+EXECUTE p2;
+ cid | name | tel | passwd
+-----+------+-----+--------
+(0 rows)
+
+RESET SESSION AUTHORIZATION;
+ALTER VIEW my_property_normal SET (security_barrier=true);
+ERROR:  ALTER TABLE SET name not supported yet
+LINE 1: ALTER VIEW my_property_normal SET (security_barrier=true);
+                                      ^
+HINT:  See https://github.com/YugaByte/yugabyte-db/issues/1124. Click '+' on the description to raise its priority
+ALTER VIEW my_property_secure SET (security_barrier=false);
+ERROR:  ALTER TABLE SET name not supported yet
+LINE 1: ALTER VIEW my_property_secure SET (security_barrier=false);
+                                      ^
+HINT:  See https://github.com/YugaByte/yugabyte-db/issues/1124. Click '+' on the description to raise its priority
+SET SESSION AUTHORIZATION regress_alice;
+EXECUTE p1;		-- To be perform as a view with security-barrier
+ cid | name | tel | passwd
+-----+------+-----+--------
+(0 rows)
+
+EXECUTE p2;		-- To be perform as a view without security-barrier
+ cid | name | tel | passwd
+-----+------+-----+--------
+(0 rows)
+
+-- Cleanup.
+RESET SESSION AUTHORIZATION;
+DROP ROLE regress_alice;
+CREATE SCHEMA regtest_schema_2;
+CREATE TABLE regtest_table_1 (a int, b text);
+CREATE VIEW regtest_view_1 AS SELECT * FROM regtest_table_1 WHERE a > 0;
+ALTER VIEW regtest_view_1 SET SCHEMA regtest_schema_2;
