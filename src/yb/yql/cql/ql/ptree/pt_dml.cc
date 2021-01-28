@@ -602,7 +602,7 @@ Status WhereExprState::AnalyzeColumnOp(SemContext *sem_context,
                                   ErrorCode::FEATURE_NOT_YET_IMPLEMENTED);
       }
 
-      if (col_args != nullptr) {
+      if (col_args != nullptr && !col_desc->ql_type()->IsJson()) {
         return sem_context->Error(expr, "IN expression not supported for subscripted column",
                                   ErrorCode::CQL_STATEMENT_INVALID);
       }
