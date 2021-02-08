@@ -88,7 +88,7 @@ void truncate_identifier(char *ident, int len, bool warn) {
 
       memcpy(buf, ident, len);
       buf[len] = '\0';
-      LOG(WARNING) << "SQL Warning: " << ErrorText(ErrorCode::NAME_TOO_LONG)
+      LOG(WARNING) << "CQL Warning: " << ErrorText(ErrorCode::NAME_TOO_LONG)
                    << "Identifier " << ident << " will be truncated to " << buf;
     }
     ident[len] = '\0';
@@ -243,7 +243,7 @@ void report_invalid_encoding(const char *mbstr, int len) {
       p += sprintf(p, " ");  // NOLINT(*)
   }
 
-  LOG(ERROR) << "SQL Error: " << ErrorText(ErrorCode::CHARACTER_NOT_IN_REPERTOIRE)
+  LOG(ERROR) << "CQL Error: " << ErrorText(ErrorCode::CHARACTER_NOT_IN_REPERTOIRE)
              << ". Invalid byte sequence for UTF8 \"" << buf << "\"";
 }
 

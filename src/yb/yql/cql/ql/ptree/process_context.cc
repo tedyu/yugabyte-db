@@ -55,7 +55,7 @@ Status ProcessContextBase::GetStatus() {
 
 void ProcessContextBase::Warn(const YBLocation& loc, const string& msg, ErrorCode error_code) {
   error_code_ = error_code;
-  LOG(WARNING) << kErrorFontStart << "SQL Warning (" << loc << "): " << msg << kErrorFontEnd
+  LOG(WARNING) << kErrorFontStart << "CQL Warning (" << loc << "): " << msg << kErrorFontEnd
                << endl;
 }
 
@@ -177,7 +177,7 @@ Status ProcessContextBase::Error(const YBLocation& loc,
 
   // Append this error message to the context.
   error_msgs()->append(msg);
-  YB_LOG_EVERY_N_SECS(WARNING, 1) << "SQL Error: " << msg;
+  YB_LOG_EVERY_N_SECS(INFO, 1) << "CQL Error: " << msg;
   return STATUS(QLError, msg.c_str(), Slice(), QLError(error_code_));
 }
 
