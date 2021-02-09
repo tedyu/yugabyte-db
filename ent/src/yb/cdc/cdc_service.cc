@@ -1407,7 +1407,7 @@ std::shared_ptr<StreamMetadata> CDCServiceImpl::GetStreamMetadataFromCache(
 MemTrackerPtr CDCServiceImpl::GetMemTracker(
     const std::shared_ptr<tablet::TabletPeer>& tablet_peer,
     const ProducerTabletInfo& producer_info) {
-  SharedLock<rw_spinlock> l(mutex_);
+  std::lock_guard<rw_spinlock> l(mutex_);
   auto it = tablet_checkpoints_.find(producer_info);
   if (it == tablet_checkpoints_.end()) {
     return nullptr;
