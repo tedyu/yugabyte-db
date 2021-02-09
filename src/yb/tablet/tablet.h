@@ -531,7 +531,10 @@ class Tablet : public AbstractTablet, public TransactionIntentApplier {
 
   CHECKED_STATUS ForceFullRocksDBCompact();
 
-  docdb::DocDB doc_db() const { return { regular_db_.get(), intents_db_.get(), &key_bounds_ }; }
+  docdb::DocDB doc_db() const {
+    std::lock_guard<std::mutex> lock(control_path_mutex_);
+    return { regular_db_.get(), intents_db_.get(), &key_bounds_ };
+  }
 
   // Returns approximate middle key for tablet split:
   // - for hash-based partitions: encoded hash code in order to split by hash code.

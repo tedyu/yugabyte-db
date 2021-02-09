@@ -767,7 +767,10 @@ Status Tablet::OpenKeyValueTablet() {
     rocksdb::DB* intents_db = nullptr;
     RETURN_NOT_OK(
         rocksdb::DB::Open(intents_rocksdb_options, db_dir + kIntentsDBSuffix, &intents_db));
-    intents_db_.reset(intents_db);
+    {
+      std::lock_guard<std::mutex> lock(control_path_mutex_);
+      intents_db_.reset(intents_db);
+    }
     intents_db_->ListenFilesChanged(std::bind(&Tablet::CleanupIntentFiles, this));
   }
 
