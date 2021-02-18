@@ -1150,6 +1150,28 @@ public class TestIndex extends BaseCQLTest {
   }
 
   @Test
+  public void testClusteredKey() throws Exception {
+    session.execute("CREATE TABLE test (id int," +
+                    "                         scope text," +
+                    "                         metadata map<text, text>," +
+                    "                         PRIMARY KEY (id))" +
+                    " WITH transactions = {'enabled': 'true'} AND default_time_to_live = 0;");
+    session.execute("CREATE INDEX test_index ON test (scope, id)" +
+                    " WITH CLUSTERING ORDER BY (id ASC) AND transactions = {'enabled': 'true'};");
+    session.execute("INSERT into test (id, scope, metadata) VALUES (1, 'test', {'a' : '1'});");
+    session.execute("INSERT into test (id, scope, metadata) VALUES (2, 'test', {'a' : '2'});");
+    session.execute("INSERT into test (id, scope, metadata) VALUES (3, 'test', {'a' : '3'});");
+    session.execute("INSERT into test (id, scope, metadata) VALUES (4, 'test', {'a' : '4'});");
+
+    RocksDBMetrics indexMetrics = getRocksDBMetric("test_index");
+    String rowDesc = "Row[3]Row[4]";
+    assertQuery("SELECT id FROM test WHERE scope = 'test' AND id > 2;", rowDesc);
+    indexMetrics = getRocksDBMetric("test_index").subtract(indexMetrics);
+    LOG.info("Difference: index {}", indexMetrics);
+    assertTrue(indexMetrics.nextCount > 0);
+  }
+
+  @Test
   public void testOrderBy() throws Exception {
     session.execute("CREATE TABLE test_order (a text," +
                     "                         b text," +

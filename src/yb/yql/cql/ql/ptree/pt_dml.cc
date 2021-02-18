@@ -536,12 +536,6 @@ Status WhereExprState::AnalyzeColumnOp(SemContext *sem_context,
     case QL_OP_GREATER_THAN_EQUAL: FALLTHROUGH_INTENDED;
     case QL_OP_GREATER_THAN: {
 
-      // Inequality conditions on hash columns are not allowed.
-      if (col_desc->is_hash()) {
-        return sem_context->Error(expr, "Partition column cannot be used in this expression",
-            ErrorCode::CQL_STATEMENT_INVALID);
-      }
-
       // Check for illogical conditions.
       if (col_args == nullptr) { // subcolumn conditions don't affect the condition counter.
         if (expr->ql_op() == QL_OP_LESS_THAN || expr->ql_op() == QL_OP_LESS_THAN_EQUAL) {

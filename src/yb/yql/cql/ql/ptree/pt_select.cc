@@ -418,6 +418,38 @@ CHECKED_STATUS PTSelectStmt::Analyze(SemContext *sem_context) {
       return Status::OK();
     }
   }
+  for (auto op : key_where_ops_) {
+    switch (op.yb_op()) {
+      case QL_OP_LESS_THAN: FALLTHROUGH_INTENDED;
+      case QL_OP_LESS_THAN_EQUAL: FALLTHROUGH_INTENDED;
+      case QL_OP_GREATER_THAN_EQUAL: FALLTHROUGH_INTENDED;
+      case QL_OP_GREATER_THAN: {
+        // Inequality conditions on hash columns are not allowed.
+        if (op.desc()->is_hash()) {
+          return sem_context->Error(op.expr(), "Partition column cannot be used in this expression",
+            ErrorCode::CQL_STATEMENT_INVALID);
+        }
+        break;
+      }
+      default: {}
+    }
+  }
+  for (auto op : where_ops_) {
+    switch (op.yb_op()) {
+      case QL_OP_LESS_THAN: FALLTHROUGH_INTENDED;
+      case QL_OP_LESS_THAN_EQUAL: FALLTHROUGH_INTENDED;
+      case QL_OP_GREATER_THAN_EQUAL: FALLTHROUGH_INTENDED;
+      case QL_OP_GREATER_THAN: {
+        // Inequality conditions on hash columns are not allowed.
+        if (op.desc()->is_hash()) {
+          return sem_context->Error(op.expr(), "Partition column cannot be used in this expression",
+            ErrorCode::CQL_STATEMENT_INVALID);
+        }
+        break;
+      }
+      default: {}
+    }
+  }
 
   // Run error checking on order by for the chosen INDEX.
   RETURN_NOT_OK(AnalyzeOrderByClause(sem_context));
