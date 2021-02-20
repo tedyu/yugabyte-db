@@ -1148,6 +1148,22 @@ public class TestIndex extends BaseCQLTest {
       }
     }
   }
+  @Test
+  public void testPrimarySelect() throws Exception {
+    session.execute("CREATE TABLE test_order (i int," +
+                    "                         j int," +
+                    "                         x int," +
+                    "                         y int," +
+                    " PRIMARY KEY (i)) with transactions = {'enabled' : true};");
+    session.execute("CREATE INDEX test_index ON test_order (x);");
+    session.execute("explain select * from test_order where i = 1 and x = 1;");
+    session.execute("INSERT INTO test_order (i, j, x, y) VALUES(1, 1, 1, 1);");
+    session.execute("INSERT INTO test_order (i, j, x, y) VALUES(2, 3, 4, 2);");
+    RocksDBMetrics indexMetrics = getRocksDBMetric("test_index");
+    session.execute("select * from test_order where i = 1 and x = 1;");
+    indexMetrics = getRocksDBMetric("test_index").subtract(indexMetrics);
+    assertTrue(indexMetrics.nextCount == 0);
+  }
 
   @Test
   public void testOrderBy() throws Exception {

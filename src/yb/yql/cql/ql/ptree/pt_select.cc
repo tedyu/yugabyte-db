@@ -117,6 +117,11 @@ class Selectivity {
       return full_table_scan_ < other.full_table_scan_;
     }
 
+    // If one covers the read fully and the other does not, prefer the one that does.
+    if (covers_fully_ != other.covers_fully_) {
+      return covers_fully_ > other.covers_fully_;
+    }
+
     // When neither is a full table scan, compare the scan ranges.
     if (!full_table_scan_ && !other.full_table_scan_) {
 
@@ -136,11 +141,6 @@ class Selectivity {
       if (num_non_key_ops_ != other.num_non_key_ops_) {
         return num_non_key_ops_ < other.num_non_key_ops_;
       }
-    }
-
-    // If one covers the read fully and the other does not, prefer the one that does.
-    if (covers_fully_ != other.covers_fully_) {
-      return covers_fully_ > other.covers_fully_;
     }
 
     // If one is local read and the other is not, prefer the one that is.
