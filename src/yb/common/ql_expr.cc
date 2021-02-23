@@ -281,6 +281,11 @@ CHECKED_STATUS QLExprExecutor::EvalCondition(const QLConditionPB& condition,
     case QL_OP_AND:
       CHECK_GT(operands.size(), 0);
       for (const auto &operand : operands) {
+        if (operand.expr_case() == QLExpressionPB::ExprCase::kValue) {
+          return STATUS(RuntimeError, "Internal error: illegal or unknown operator");
+        }
+      }
+      for (const auto &operand : operands) {
         CHECK_EQ(operand.expr_case(), QLExpressionPB::ExprCase::kCondition);
         RETURN_NOT_OK(EvalCondition(operand.condition(), table_row, result));
         if (!result->bool_value()) {
@@ -291,6 +296,11 @@ CHECKED_STATUS QLExprExecutor::EvalCondition(const QLConditionPB& condition,
 
     case QL_OP_OR:
       CHECK_GT(operands.size(), 0);
+      for (const auto &operand : operands) {
+        if (operand.expr_case() == QLExpressionPB::ExprCase::kValue) {
+          return STATUS(RuntimeError, "Internal error: illegal or unknown operator");
+        }
+      }
       for (const auto &operand : operands) {
         CHECK_EQ(operand.expr_case(), QLExpressionPB::ExprCase::kCondition);
         RETURN_NOT_OK(EvalCondition(operand.condition(), table_row, result));

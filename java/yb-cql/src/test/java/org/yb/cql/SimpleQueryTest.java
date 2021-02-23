@@ -37,9 +37,20 @@ import org.junit.runner.RunWith;
 
 import org.yb.YBTestRunner;
 
+import com.datastax.driver.core.exceptions.ServerError;
+
 @RunWith(value=YBTestRunner.class)
 public class SimpleQueryTest extends CQLTester
 {
+  void assertUnknownOperator(String query) throws Exception {
+    try {
+      execute(query);
+    } catch (ServerError se) {
+      if (!se.getCause().toString().contains("illegal or unknown operator")) {
+        throw se;
+      }
+    }
+  }
   @Test
   public void testDynamicCompactTables() throws Throwable
   {
@@ -51,6 +62,9 @@ public class SimpleQueryTest extends CQLTester
 
     execute("INSERT INTO %s (k, t, v) values (?, ?, ?)", "key", 4, "v14");
     execute("INSERT INTO %s (k, t, v) values (?, ?, ?)", "key", 5, "v15");
+
+    assertUnknownOperator("SELECT * FROM %s if true and false");
+    assertUnknownOperator("SELECT * FROM %s if true or false");
 
     assertRows(execute("SELECT * FROM %s"),
                row("key",  1, "v11"),
