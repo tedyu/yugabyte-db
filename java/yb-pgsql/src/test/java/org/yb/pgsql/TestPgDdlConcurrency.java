@@ -17,7 +17,7 @@ import static org.yb.AssertionWrappers.assertFalse;
 
 @RunWith(value=YBTestRunnerNonTsanOnly.class)
 public class TestPgDdlConcurrency extends BasePgSQLTest {
-  private static final Logger LOG = LoggerFactory.getLogger(TestPgSelect.class);
+  private static final Logger LOG = LoggerFactory.getLogger(TestPgDdlConcurrency.class);
 
   @Override
   protected int getReplicationFactor() {
@@ -82,6 +82,7 @@ public class TestPgDdlConcurrency extends BasePgSQLTest {
                   final String msg = e.getMessage();
                   if (!(msg.contains("Catalog Version Mismatch") ||
                         msg.contains("Restart read required") ||
+                        msg.contains("invalid attribute number") ||
                         msg.contains("schema version mismatch"))) {
                     LOG.error("Unexpected exception", e);
                     errorsDetected.set(true);
