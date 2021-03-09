@@ -128,13 +128,14 @@ boost::optional<uint64_t> ObsolescenceTracker::GetTtlRemainingSeconds(
   if (ttl_value == Value::kMaxTtl) {
     return -1;
   }
-  int64_t time_since_ttl_write_seconds = (
-      server::HybridClock::GetPhysicalValueMicros(doc_read_time.read) -
+  int64_t time_since_ttl_write_milliseconds =
+      (server::HybridClock::GetPhysicalValueMicros(doc_read_time.read) -
       server::HybridClock::GetPhysicalValueMicros(ttl_write_time)) /
-      MonoTime::kMicrosecondsPerSecond;
-  int64_t ttl_value_seconds = ttl_value.ToMilliseconds() / MonoTime::kMillisecondsPerSecond;
-  int64_t ttl_remaining_seconds = ttl_value_seconds - time_since_ttl_write_seconds;
-  return std::max(static_cast<int64_t>(0), ttl_remaining_seconds);
+      MonoTime::kMicrosecondsPerMillisecond;
+  auto ttl_ms = ttl_value.ToMilliseconds();
+  if (ttl_ms <= time_since_ttl_write_milliseconds) return 0;
+  return (ttl_ms - time_since_ttl_write_milliseconds) /
+      MonoTime::kMillisecondsPerSecond;
 }
 
 namespace {
