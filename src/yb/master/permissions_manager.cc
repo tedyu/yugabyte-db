@@ -756,6 +756,12 @@ Status PermissionsManager::GetPermissions(
     rpc::RpcContext* rpc) {
   std::shared_ptr<GetPermissionsResponsePB> permissions_cache;
   {
+    SharedLock<CatalogManager::LockType> l(catalog_manager_->lock_);
+    if (permissions_cache_) {
+      permissions_cache = permissions_cache_;
+    }
+  }
+  if (!permissions_cache) {
     std::lock_guard<decltype(catalog_manager_->lock_)> l_big(catalog_manager_->lock_);
     if (!permissions_cache_) {
       BuildRecursiveRolesUnlocked();
