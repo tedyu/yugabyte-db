@@ -302,10 +302,32 @@ CoarseTimePoint Rpcs::DoRequestAbortAll(RequestShutdown shutdown) {
   // It takes some time to complete rpc command after its deadline has passed.
   // So we add extra time for it.
   auto single_call_extra_delay = std::chrono::milliseconds(FLAGS_rpcs_shutdown_extra_delay_ms);
+  std::set<int> empty_calls;
+  int i = 0;
   for (auto& call : calls) {
-    CHECK(call);
+    if (!call) {
+      empty_calls.insert(i);
+      i++;
+      continue;
+    }
+    i++;
     call->Abort();
     deadline = std::max(deadline, call->deadline() + single_call_extra_delay);
+  }
+  while (!empty_calls.empty()) {
+    {
+      std::lock_guard<std::mutex> lock(*mutex_);
+      i = 0;
+      for (auto& call : calls_) {
+        if (call && empty_calls.count(i) > 0) {
+          call->Abort();
+          deadline = std::max(deadline, call->deadline() + single_call_extra_delay);
+          empty_calls.erase(i);
+        }
+        i++;
+      }
+    }
+    std::this_thread::sleep_for(10ms);
   }
 
   return deadline;
@@ -359,7 +381,9 @@ RpcCommandPtr Rpcs::Unregister(Handle* handle) {
   auto result = **handle;
   {
     std::lock_guard<std::mutex> lock(*mutex_);
-    calls_.erase(*handle);
+    if (!shutdown_) {
+      calls_.erase(*handle);
+    }
     cond_.notify_one();
   }
   *handle = calls_.end();
