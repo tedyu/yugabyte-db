@@ -2533,6 +2533,7 @@ AddRelationNewConstraints(Relation rel,
 	pstate->p_sourcetext = queryString;
 	rte = addRangeTableEntryForRelation(pstate,
 										rel,
+										AccessShareLock,
 										NULL,
 										false,
 										true);
