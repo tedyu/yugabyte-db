@@ -4122,7 +4122,7 @@ void CatalogManager::CleanUpDeletedTables() {
     }
   }
   if (tables_to_update_on_disk.size() > 0) {
-    Status s = sys_catalog_->UpdateItems(tables_to_update_on_disk, leader_ready_term());
+    Status s = sys_catalog_->DeleteItems(tables_to_update_on_disk, leader_ready_term());
     if (!s.ok()) {
       LOG(WARNING) << "Error marking tables as DELETED: " << s.ToString();
       return;
@@ -4131,7 +4131,6 @@ void CatalogManager::CleanUpDeletedTables() {
     for (auto& lock : table_locks) {
       lock->Commit();
     }
-    // TODO: Check if we want to delete the totally deleted table from the sys_catalog here.
     // TODO: SysCatalog::DeleteItem() if we've DELETED all user tables in a DELETING namespace.
     // TODO: Also properly handle namespace_ids_map_.erase(table->namespace_id())
   }
