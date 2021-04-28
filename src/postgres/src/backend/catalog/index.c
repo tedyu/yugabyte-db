@@ -973,8 +973,8 @@ index_create(Relation heapRelation,
 	Assert(indexRelationId == RelationGetRelid(indexRelation));
 
 	/*
-	 * Create index in YugaByte only if it is a secondary index. Primary key is
-	 * an implicit part of the base table in YugaByte and doesn't need to be created.
+	 * Create index in Yugabyte only if it is a secondary index. Primary key is
+	 * an implicit part of the base table in Yugabyte and doesn't need to be created.
 	 */
 	if (IsYBRelation(indexRelation) && !isprimary)
 	{
@@ -1249,7 +1249,8 @@ index_create(Relation heapRelation,
 	{
 		index_register(heapRelationId, indexRelationId, indexInfo);
 	}
-	else if ((flags & INDEX_CREATE_SKIP_BUILD) != 0)
+	else if ((flags & INDEX_CREATE_SKIP_BUILD) != 0 ||
+			!IsYBRelation(indexRelation) || isprimary)
 	{
 		/*
 		 * Caller is responsible for filling the index later on.  However,
@@ -1264,8 +1265,13 @@ index_create(Relation heapRelation,
 	}
 	else
 	{
-		index_build(heapRelation, indexRelation, indexInfo, isprimary, false,
-					true);
+		/*
+		 * Build index in Yugabyte only if it is a secondary index. Primary key
+		 * Index is an implicit part of the base table in Yugabyte and doesn't
+		 * need to be built explicitly. (#8024)
+		 */
+		index_build(heapRelation, indexRelation, indexInfo, isprimary,
+					false, true);
 	}
 
 	/*
@@ -2813,7 +2819,7 @@ IndexBuildHeapRangeScanInternal(Relation heapRelation,
 		CHECK_FOR_INTERRUPTS();
 
 		/*
-		 * Skip handling of HOT-chained tuples which does not apply to YugaByte-based
+		 * Skip handling of HOT-chained tuples which does not apply to Yugabyte-based
 		 * tables.
 		 */
 		if (!IsYBRelation(heapRelation))
@@ -3089,7 +3095,7 @@ IndexBuildHeapRangeScanInternal(Relation heapRelation,
 		}
 		else
 		{
-			/* In YugaByte mode DocDB will only send live tuples. */
+			/* In Yugabyte mode DocDB will only send live tuples. */
 			tupleIsAlive = true;
 		}
 
@@ -3572,7 +3578,7 @@ validate_index_heapscan(Relation heapRelation,
 	while ((heapTuple = heap_getnext(scan, ForwardScanDirection)) != NULL)
 	{
 		/*
-		 * For YugaByte tables, there is no need to find the root tuple. Just
+		 * For Yugabyte tables, there is no need to find the root tuple. Just
 		 * insert the fetched tuple.
 		 */
 		if (IsYBRelation(heapRelation))
