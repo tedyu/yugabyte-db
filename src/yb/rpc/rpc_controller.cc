@@ -40,6 +40,8 @@
 
 namespace yb { namespace rpc {
 
+using namespace std::literals;
+
 RpcController::RpcController() {
   DVLOG(4) << "RpcController " << this << " constructed";
 }
@@ -66,6 +68,9 @@ void RpcController::Swap(RpcController* other) {
     CHECK(other->finished());
   }
 
+  if (other->timeout_ > 3600s) {
+    LOG(DFATAL) << "swap " << GetStackTrace();
+  }
   std::swap(timeout_, other->timeout_);
   std::swap(allow_local_calls_in_curr_thread_, other->allow_local_calls_in_curr_thread_);
   std::swap(call_, other->call_);
@@ -115,6 +120,9 @@ Result<Slice> RpcController::GetSidecar(int idx) const {
 void RpcController::set_timeout(const MonoDelta& timeout) {
   std::lock_guard<simple_spinlock> l(lock_);
   DCHECK(!call_ || call_->state() == RpcCallState::READY);
+  if (timeout > 3600s) {
+    LOG(DFATAL) << "set " << GetStackTrace();
+  }
   timeout_ = timeout;
 }
 
