@@ -644,6 +644,9 @@ Status QLWriteOperation::ApplyForJsonOperators(const QLColumnValuePB& column_val
   Jsonb rhs(std::move(column_value.expr().value().jsonb_value()));
   rapidjson::Document rhs_doc;
   RETURN_NOT_OK(rhs.ToRapidJson(&rhs_doc));
+  if (request_.ignore_null_json_field() && rhs_doc.GetType() == rapidjson::Type::kNullType) {
+    return Status::OK();
+  }
 
   // Update the json value.
   rapidjson::Value::MemberIterator memberit;

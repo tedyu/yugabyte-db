@@ -115,8 +115,10 @@ PTUpdateStmt::PTUpdateStmt(MemoryContext *memctx,
                            PTExpr::SharedPtr if_clause,
                            const bool else_error,
                            PTDmlUsingClause::SharedPtr using_clause,
-                           const bool return_status)
-    : PTDmlStmt(memctx, loc, where_clause, if_clause, else_error, using_clause, return_status),
+                           const bool return_status,
+                           const bool ignore_null_json_field)
+    : PTDmlStmt(memctx, loc, where_clause, if_clause, else_error, using_clause, return_status,
+                ignore_null_json_field),
       relation_(relation),
       set_clause_(set_clause) {
 }

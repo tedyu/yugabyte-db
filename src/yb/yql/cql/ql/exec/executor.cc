@@ -1328,6 +1328,9 @@ Status Executor::ExecPTNode(const PTUpdateStmt *tnode, TnodeContext* tnode_conte
   if (tnode->returns_status()) {
     req->set_returns_status(true);
   }
+  if (tnode->ignore_null_json_field()) {
+    req->set_ignore_null_json_field(true);
+  }
 
   // Set whether write op writes to the static/primary row.
   update_op->set_writes_static_row(tnode->ModifiesStaticRow());

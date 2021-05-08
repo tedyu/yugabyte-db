@@ -231,7 +231,8 @@ class PTDmlStmt : public PTCollection {
             PTExpr::SharedPtr if_clause = nullptr,
             bool else_error = false,
             PTDmlUsingClause::SharedPtr using_clause = nullptr,
-            bool returns_status = false);
+            bool returns_status = false,
+            bool ignore_null_json_field = false);
   // Clone a DML tnode for re-analysis.
   PTDmlStmt(MemoryContext *memctx, const PTDmlStmt& other, bool copy_if_clause);
   virtual ~PTDmlStmt();
@@ -311,6 +312,10 @@ class PTDmlStmt : public PTCollection {
 
   bool returns_status() const {
     return returns_status_;
+  }
+
+  const bool ignore_null_json_field() const {
+    return ignore_null_json_field_;
   }
 
   const PTExpr::SharedPtr& where_clause() const {
@@ -520,6 +525,7 @@ class PTDmlStmt : public PTCollection {
   const bool else_error_ = false;
   const PTDmlUsingClause::SharedPtr using_clause_;
   const bool returns_status_ = false;
+  const bool ignore_null_json_field_ = false;
   MCVector<PTBindVar*> bind_variables_;
 
   // -- The semantic analyzer will decorate this node with the following information --

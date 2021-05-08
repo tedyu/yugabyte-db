@@ -127,7 +127,8 @@ class PTUpdateStmt : public PTDmlStmt {
                PTExpr::SharedPtr if_clause = nullptr,
                bool else_error = false,
                PTDmlUsingClause::SharedPtr using_clause = nullptr,
-               const bool return_status = false);
+               const bool return_status = false,
+               const bool ignore_null_json_field = false);
   virtual ~PTUpdateStmt();
 
   template<typename... TypeArgs>

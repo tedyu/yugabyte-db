@@ -393,6 +393,7 @@ using namespace yb::ql;
 %type <KeywordType>       col_name_keyword reserved_keyword
 
 %type <PBool>             boolean opt_else_clause opt_returns_clause opt_json_clause_default_null
+                          opt_ignore_null_clause
 
 //--------------------------------------------------------------------------------------------------
 // Inactive tree node declarations (%type).
@@ -607,14 +608,14 @@ using namespace yb::ql;
                           EXCEPT EXCLUDE EXCLUDING EXCLUSIVE EXECUTE EXISTS EXPLAIN EXTENSION
                           EXTERNAL EXTRACT
 
-                          FALSE_P FAMILY FETCH FILTER FILTERING FIRST_P FLOAT_P FOLLOWING FOR FORCE
-                          FOREIGN FORWARD FREEZE FROM FROZEN FULL FUNCTION FUNCTIONS
+                          FALSE_P FAMILY FETCH FIELD FILTER FILTERING FIRST_P FLOAT_P FOLLOWING FOR
+                          FORCE FOREIGN FORWARD FREEZE FROM FROZEN FULL FUNCTION FUNCTIONS
 
                           GLOBAL GRANT GRANTED GREATEST GROUP_P GROUPING
 
                           HANDLER HAVING HEADER_P HOLD HOUR_P
 
-                          IDENTITY_P IF_P ILIKE IMMEDIATE IMMUTABLE IMPLICIT_P IMPORT_P IN_P
+                          IDENTITY_P IF_P IGNORE ILIKE IMMEDIATE IMMUTABLE IMPLICIT_P IMPORT_P IN_P
                           INCLUDE INCLUDING INCREMENT INDEX INDEXES INET INFINITY INHERIT INHERITS
                           INITIALLY INLINE_P INNER_P INOUT INPUT_P INSENSITIVE INSERT INSTEAD
                           INT_P INTEGER INTERSECT INTERVAL INTO INVOKER IS ISNULL ISOLATION
@@ -627,8 +628,8 @@ using namespace yb::ql;
                           LEVEL LIKE LIMIT LIST LISTEN LOAD LOCAL LOCALTIME LOCALTIMESTAMP LOCATION
                           LOCK_P LOCKED LOGGED LOGIN
 
-                          MAP MAPPING MATCH MATERIALIZED MAXVALUE MINUTE_P MINVALUE MODE MODIFY
-                          MONTH_P MOVE
+                          MAP MAPPING MATCH MATERIALIZED MAXVALUE MINUTE_P MINVALUE MISSING MODE
+                          MODIFY MONTH_P MOVE
 
                           NAME_P NAMES NAN NATIONAL NATURAL NCHAR NEXT NO NONE NOT NOTHING NOTIFY
                           NOTNULL NOWAIT NULL_P NULLIF NULLS_P NUMERIC
@@ -2655,6 +2656,16 @@ opt_returns_clause:
   }
 ;
 
+opt_ignore_null_clause:
+  /* EMPTY */ {
+    $$ = false;
+  }
+  | IGNORE MISSING JSON FIELD {
+    $$ = true;
+  }
+;
+
+
 // Can't easily make AS optional here, because VALUES in insert_rest would
 // have a shift/reduce conflict with VALUES as an optional alias.  We could
 // easily allow unreserved_keywords as optional aliases, but that'd be an odd
@@ -2791,12 +2802,13 @@ DELETE_P opt_target_list FROM relation_expr_opt_alias opt_using_ttl_timestamp_cl
 
 UpdateStmt:
   UPDATE relation_expr_opt_alias opt_using_ttl_timestamp_clause SET set_clause_list
-  opt_where_or_current_clause opt_returns_clause {
-    $$ = MAKE_NODE(@1, PTUpdateStmt, $2, $5, $6, nullptr, false, $3, $7);
+  opt_where_or_current_clause opt_returns_clause opt_ignore_null_clause {
+    $$ = MAKE_NODE(@1, PTUpdateStmt, $2, $5, $6, nullptr, false, $3, $7, $8);
   }
   | UPDATE relation_expr_opt_alias opt_using_ttl_timestamp_clause SET
-  set_clause_list opt_where_or_current_clause if_clause opt_else_clause opt_returns_clause {
-    $$ = MAKE_NODE(@1, PTUpdateStmt, $2, $5, $6, $7, $8, $3, $9);
+  set_clause_list opt_where_or_current_clause if_clause opt_else_clause opt_returns_clause
+  opt_ignore_null_clause {
+    $$ = MAKE_NODE(@1, PTUpdateStmt, $2, $5, $6, $7, $8, $3, $9, $10);
   }
 ;
 
@@ -5023,6 +5035,7 @@ unreserved_keyword:
   | EXTENSION { $$ = $1; }
   | EXTERNAL { $$ = $1; }
   | FAMILY { $$ = $1; }
+  | FIELD { $$ = $1; }
   | FILTER { $$ = $1; }
   | FILTERING { $$ = $1; }
   | FIRST_P { $$ = $1; }
@@ -5077,6 +5090,7 @@ unreserved_keyword:
   | MAXVALUE { $$ = $1; }
   | MINUTE_P { $$ = $1; }
   | MINVALUE { $$ = $1; }
+  | MISSING { $$ = $1; }
   | MODE { $$ = $1; }
   | MONTH_P { $$ = $1; }
   | MOVE { $$ = $1; }
@@ -5382,6 +5396,7 @@ reserved_keyword:
   | GRANT { $$ = $1; }
   | HAVING { $$ = $1; }
   | IF_P { $$ = $1; }
+  | IGNORE { $$ = $1; }
   | IN_P { $$ = $1; }
   | INFINITY { $$ = $1; }
   | INITIALLY { $$ = $1; }

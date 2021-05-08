@@ -153,6 +153,7 @@ message QLWriteRequestPB {
   // Does this request correspond to backfilling an index table?
   optional bool is_backfill = 19 [default = false];
   optional bool is_compatible_with_previous_version = 20 [ default = false ];
+  optional bool ignore_null_json_field = 21 [default = false];
 }
 
 //-------------------------------------- Read request ----------------------------------------
