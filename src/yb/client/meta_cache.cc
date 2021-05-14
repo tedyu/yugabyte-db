@@ -419,9 +419,12 @@ void RemoteTablet::GetRemoteTabletServers(
   };
   std::vector<ReplicaUpdate> replica_updates;
   std::vector<RemoteReplica> replicas;
+  auto start_time = MonoTime::Now();
+  MonoTime after_copy;
   {
     SharedLock<rw_spinlock> lock(mutex_);
     replicas = replicas_;
+    after_copy = MonoTime::Now();
   }
   int num_alive_live_replicas = 0;
   int num_alive_read_replicas = 0;
@@ -501,6 +504,10 @@ void RemoteTablet::GetRemoteTabletServers(
     servers->push_back(replica.ts);
   }
   SetAliveReplicas(num_alive_live_replicas, num_alive_read_replicas);
+  auto done_d = MonoTime::Now();
+  MonoDelta copy_d = after_copy - start_time;
+  MonoDelta total = done_d - start_time;
+  LOG(INFO) << "remote tablet copy took " << copy_d.ToMilliseconds() << ", handling took " << total.ToMilliseconds();
 
   if (!replica_updates.empty()) {
     std::lock_guard<rw_spinlock> lock(mutex_);
