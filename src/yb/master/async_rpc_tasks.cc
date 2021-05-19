@@ -296,8 +296,13 @@ bool RetryingTSRpcTask::RescheduleWithBackoffDelay() {
   }
   // Normal rand is seeded by default with 1. Using the same for rand_r seed.
   unsigned int seed = 1;
-  int64_t jitter_ms = rand_r(&seed) % 50;  // Add up to 50ms of additional random delay.
-  int64_t delay_millis = std::min<int64_t>(base_delay_ms + jitter_ms, millis_remaining);
+  int64_t delay_millis;
+  if (base_delay_ms < millis_remaining) {
+    int64_t jitter_ms = rand_r(&seed) % 50;  // Add up to 50ms of additional random delay.
+    delay_millis = std::min<int64_t>(base_delay_ms + jitter_ms, millis_remaining);
+  } else {
+    delay_millis = millis_remaining;
+  }
 
   if (delay_millis <= 0) {
     auto status = STATUS(TimedOut, "Request timed out");
