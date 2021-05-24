@@ -112,6 +112,26 @@ do $$
 $$;
 }
 
+# Check that the results of a query can be detoasted just after committing
+# (there's no interaction with VACUUM here)
+step "fetch-after-commit"
+{
+do $$
+  declare
+    r record;
+    t text;
+  begin
+    insert into test1 values (2, repeat('bar', 3000));
+    insert into test1 values (3, repeat('baz', 4000));
+    for r in select test1.a from test1 loop
+      commit;
+      select b into t from test1 where a = r.a;
+      raise notice 'length(t) = %', length(t);
+    end loop;
+  end;
+$$;
+}
+
 session "s2"
 setup
 {
