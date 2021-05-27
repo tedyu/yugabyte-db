@@ -190,7 +190,7 @@ public class TestSpark3Jsonb extends BaseMiniClusterTest {
       while (iterator.hasNext()) {
           Row row = iterator.next();
           String jsonb = row.getString(0);
-          assertEquals(jsonb, "{\"dl\":1122,\"rsrp\":-80,\"rsrq\":null,\"sinr\":100,\"ul\":72}");
+          assertEquals(jsonb, "{\"dl\":1122,\"rsrp\":\"s80\",\"rsrq\":null,\"sinr\":\"100.1\",\"ul\":72}");
       }
       spark.close();
   }
@@ -205,6 +205,7 @@ public class TestSpark3Jsonb extends BaseMiniClusterTest {
     updatedRows.show();
     updatedRows.write().format("org.apache.spark.sql.cassandra").option("keyspace", KEYSPACE)
         .option("table", CDR_TABLE)
+        .option("spark.cassandra.json.quoteValueString", "true")
         .option("spark.cassandra.mergeable.json.column.mapping", "dl,rsrp,sinr,ul,rsrq:usage")
         .mode(SaveMode.Append).save();
   }
