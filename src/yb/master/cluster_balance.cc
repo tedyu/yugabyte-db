@@ -1120,8 +1120,19 @@ Result<bool> ClusterLoadBalancer::HandleRemoveReplicas(
   if (VERIFY_RESULT(HandleRemoveIfWrongPlacement(out_tablet_id, out_from_ts))) {
     return true;
   }
-
-  for (const auto& tablet_id : state_->tablets_over_replicated_) {
+  if (state_->tablets_over_replicated_.size() == 0) {
+    return false;
+  }
+  unsigned int seed = 1;
+  auto it = std::begin(state_->tablets_over_replicated_);
+  std::advance(it, rand_r(&seed) % state_->tablets_over_replicated_.size());
+  size_t cnt = 0;
+  for (; cnt < state_->tablets_over_replicated_.size(); cnt++) {
+    auto& tablet_id = *it;
+    it++;
+    if (it == state_->tablets_over_replicated_.end()) {
+      it = std::begin(state_->tablets_over_replicated_);
+    }
     // Skip if there is a pending ADD_SERVER.
     if (VERIFY_RESULT(IsConfigMemberInTransitionMode(tablet_id)) ||
         state_->per_tablet_meta_[tablet_id].starting > 0) {
