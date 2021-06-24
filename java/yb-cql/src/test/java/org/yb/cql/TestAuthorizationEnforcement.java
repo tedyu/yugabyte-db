@@ -25,6 +25,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
+import org.junit.runners.model.MultipleFailureException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -674,8 +675,23 @@ public class TestAuthorizationEnforcement extends BaseAuthenticationCQLTest {
     createRole(cs.getSession(), anotherUsername, password, true, false, false);
     grantPermission(MODIFY, KEYSPACE, keyspace, anotherUsername);
 
-    thrown.expect(UnauthorizedException.class);
-    cs2.execute(String.format("INSERT INTO %s.%s (h) VALUES (%d)", keyspace, table, VALUE));
+    try {
+      cs2.execute(String.format("INSERT INTO %s.%s (h) VALUES (%d)", keyspace, table, VALUE));
+    } catch (UnauthorizedException ue) {
+      return;
+    } catch (Throwable t) {
+      if (!(t instanceof MultipleFailureException)) {
+        throw t;
+      }
+      MultipleFailureException mfe = (MultipleFailureException) t;
+      for (Throwable t1 : mfe.getFailures()) {
+        if (t1 instanceof UnauthorizedException) {
+          return;
+        }
+      }
+      throw mfe;
+    }
+    throw new Exception("Didn't encounter UnauthorizedException");
   }
 
   @Test
