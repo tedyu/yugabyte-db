@@ -89,11 +89,13 @@ struct TabletOnDiskSizeInfo {
   template <class PB>
   static TabletOnDiskSizeInfo FromPB(const PB& pb) {
     return {
-      .consensus_metadata_disk_size = pb.consensus_metadata_disk_size(),
-      .wal_files_disk_size = pb.wal_files_disk_size(),
-      .sst_files_disk_size = pb.sst_files_disk_size(),
-      .uncompressed_sst_files_disk_size = pb.uncompressed_sst_files_disk_size(),
-      .sum_on_disk_size = pb.estimated_on_disk_size()
+      .consensus_metadata_disk_size =
+        pb.has_consensus_metadata_disk_size() ? pb.consensus_metadata_disk_size() : 0,
+      .wal_files_disk_size = pb.has_wal_files_disk_size() ? pb.wal_files_disk_size() : 0,
+      .sst_files_disk_size = pb.has_sst_files_disk_size() ? pb.sst_files_disk_size() : 0,
+      .uncompressed_sst_files_disk_size =
+        pb.has_uncompressed_sst_files_disk_size() ? pb.uncompressed_sst_files_disk_size() : 0,
+      .sum_on_disk_size = pb.has_estimated_on_disk_size() ? pb.estimated_on_disk_size() : 0
     };
   }
 
