@@ -1283,7 +1283,7 @@ yb_servers(PG_FUNCTION_ARGS)
     const char *node_type = is_primary ? "primary" : "read_replica";
     // TODO: Remove hard coding of port and num_connections
     values[0] = CStringGetTextDatum(server->host);
-    values[1] = Int64GetDatum(5433);
+    values[1] = Int64GetDatum(server->port);
     values[2] = Int64GetDatum(0);
     values[3] = CStringGetTextDatum(node_type);
     values[4] = CStringGetTextDatum(server->cloud);

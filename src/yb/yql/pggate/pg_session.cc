@@ -1242,6 +1242,7 @@ Status PgSession::ListTabletServers(YBCServerDescriptor **servers, int *numofser
       const char *zoneC = YBCPAllocStdString(zone);
       const char *publicIpC = YBCPAllocStdString(publicIp);
       servers[i] = reinterpret_cast<YBCServerDescriptor *>(YBCPAlloc(sizeof(YBCServerDescriptor)));
+      servers[i]->port = tablet_servers.at(i)->port();
       servers[i]->host = hostC;
       servers[i]->cloud = cloudC;
       servers[i]->region = regionC;

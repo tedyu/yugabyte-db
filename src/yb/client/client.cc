@@ -1502,10 +1502,16 @@ Status YBClient::ListLiveTabletServers(
     std::string region = "";
     std::string zone = "";
     int broadcast_sz = entry.registration().common().broadcast_addresses().size();
+    uint16_t port = 0;
 
     std::string publicIp = "";
     if (broadcast_sz > 0) {
       publicIp = entry.registration().common().broadcast_addresses().Get(0).host();
+      port = entry.registration().common().broadcast_addresses().Get(0).port();
+    } else {
+      if (entry.registration().common().private_rpc_addresses().size() > 0) {
+        port = entry.registration().common().private_rpc_addresses().Get(0).port();
+      }
     }
 
     bool isPrimary = !entry.isfromreadreplica();
@@ -1522,7 +1528,8 @@ Status YBClient::ListLiveTabletServers(
     auto ts = std::make_unique<YBTabletServerPlacementInfo>(
         entry.instance_id().permanent_uuid(),
         DesiredHostPort(entry.registration().common(), data_->cloud_info_pb_).host(),
-        entry.registration().common().placement_uuid(), cloud, region, zone, isPrimary, publicIp);
+        entry.registration().common().placement_uuid(), cloud, region, zone, isPrimary,
+        publicIp, port);
     tablet_servers->push_back(std::move(ts));
   }
   return Status::OK();

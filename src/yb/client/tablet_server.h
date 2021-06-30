@@ -57,10 +57,12 @@ class YBTabletServerPlacementInfo : public YBTabletServer {
   YBTabletServerPlacementInfo(std::string uuid, std::string hostname,
       std::string placement_uuid = "",
       std::string cloud = "", std::string region = "",
-      std::string zone = "", bool primary = true, std::string publicIp = "")
+      std::string zone = "", bool primary = true, std::string publicIp = "",
+      uint16_t port = 0)
       : YBTabletServer(uuid, hostname, placement_uuid),
      cloud_(std::move(cloud)), region_(std::move(region)),
-     zone_(std::move(zone)), is_primary_(primary), public_ip_(std::move(publicIp)) {}
+     zone_(std::move(zone)), is_primary_(primary), public_ip_(std::move(publicIp)),
+     port_(port) {}
 
   const std::string& publicIp() const {
     return public_ip_;
@@ -82,6 +84,10 @@ class YBTabletServerPlacementInfo : public YBTabletServer {
     return is_primary_;
   }
 
+  const uint16_t port() const {
+    return port_;
+  }
+
  private:
 
   const std::string cloud_;
@@ -89,6 +95,7 @@ class YBTabletServerPlacementInfo : public YBTabletServer {
   const std::string zone_;
   const bool is_primary_;
   const std::string public_ip_;
+  const uint16_t port_;
 };
 } // namespace client
 } // namespace yb
