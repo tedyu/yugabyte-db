@@ -1036,9 +1036,16 @@ ybcSetupTargets(YbScanDesc ybScan, YbScanPlan scan_plan, Scan *pg_scan_plan) {
 		 */
 		for (int i = 0; i < index->rd_index->indnatts; i++)
 		ybcAddTargetColumnIfRequired(&filter, index->rd_index->indkey.values[i]);
-	else
-		for (AttrNumber attnum = 1; attnum <= ybScan->target_desc->natts; attnum++)
+	else if (ybScan->prepare_params.index_only_scan) {
+		for (AttrNumber attnum = 1; attnum <= ybScan->target_desc->natts; attnum++) {
+			ybcAddTargetColumn(filter.ybScan, attnum);
+			elog(LOG, "not adding %d", attnum);
+		}
+	} else {
+		for (AttrNumber attnum = 1; attnum <= ybScan->target_desc->natts; attnum++) {
 			ybcAddTargetColumnIfRequired(&filter, attnum);
+		}
+	}
 	ybcResetColumnFilter(&filter);
 
 	if (scan_plan->target_relation->rd_rel->relhasoids)
