@@ -33,6 +33,18 @@ public class TestPgIndex extends BasePgSQLTest {
   private static final Logger LOG = LoggerFactory.getLogger(TestPgIndex.class);
 
   @Test
+  public void projectionWithoutLikeColumn() throws Exception {
+    try (Statement stmt = connection.createStatement()) {
+      stmt.executeUpdate("create table wh9176 (tenant bigint, docid varchar(200))");
+      stmt.executeUpdate("create index wh_i7 on wh9176(tenant, docid)");
+      stmt.executeUpdate("INSERT INTO wh9176 VALUES (1, 'ab')");
+      stmt.executeUpdate("INSERT INTO wh9176 VALUES (2, 'b')");
+      assertQuery(stmt, "select tenant from wh9176 where tenant = 1 and docid like '%b%'",
+        new Row(1));
+    }
+  }
+
+  @Test
   public void testConcurrentInsert() throws Exception {
     try (Statement statement = connection.createStatement()) {
       statement.execute("CREATE TABLE t(value INT NOT NULL UNIQUE, worker_idx INT NOT NULL)");

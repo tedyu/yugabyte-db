@@ -1000,7 +1000,14 @@ ybcInitColumnFilter(YbColumnFilter *filter, YbScanDesc ybScan, Scan *pg_scan_pla
 		TargetEntry *tle = (TargetEntry *) lfirst(lc);
 		pull_varattnos_min_attr((Node *) tle->expr, target_relid, &items, min_attr);
 	}
-
+	if (ybScan->prepare_params.index_only_scan)
+	{
+		/* Collect from qual conditions */
+		foreach(lc, pg_scan_plan->plan.qual)
+		{
+			pull_varattnos_min_attr((Node *) lfirst(lc), target_relid, &items, min_attr);
+		}
+	}
 	/* In case InvalidAttrNumber is set whole row columns are required */
 	if (bms_is_member(InvalidAttrNumber - min_attr + 1, items))
 		bms_free(items);
