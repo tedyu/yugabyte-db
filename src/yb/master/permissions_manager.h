@@ -56,6 +56,8 @@ class PermissionsManager final {
                             DeleteRoleResponsePB* resp,
                             rpc::RpcContext* rpc);
 
+  CHECKED_STATUS PrepareDefaultAndBuildRecursiveRoles(int64_t term);
+
   // Generic Create Role function for both default roles and user defined roles.
   CHECKED_STATUS CreateRoleUnlocked(
       const std::string& role_name,
@@ -65,7 +67,7 @@ class PermissionsManager final {
       int64_t term,
       // This value is only set to false during the creation of the
       // default role when it doesn't exist.
-      const bool increment_roles_version = true) REQUIRES_SHARED(catalog_manager_->mutex_);
+      const bool increment_roles_version = true) REQUIRES_SHARED(mutex_);
 
   // Grant one role to another role.
   CHECKED_STATUS GrantRevokeRole(const GrantRevokeRoleRequestPB* req,
@@ -86,7 +88,7 @@ class PermissionsManager final {
 
   // Increment the version stored in roles_version_ if it exists. Otherwise, creates a
   // SysVersionInfo object with version equal to 0 to track the roles versions.
-  CHECKED_STATUS IncrementRolesVersionUnlocked() REQUIRES_SHARED(catalog_manager_->mutex_);
+  CHECKED_STATUS IncrementRolesVersionUnlocked() REQUIRES_SHARED(mutex_);
 
   // Grant the specified permissions.
   template<class RespClass>
@@ -106,13 +108,13 @@ class PermissionsManager final {
   template<class RespClass>
   CHECKED_STATUS RemoveAllPermissionsForResourceUnlocked(
       const std::string& canonical_resource, RespClass* resp)
-      REQUIRES_SHARED(catalog_manager_->mutex_);
+      REQUIRES_SHARED(mutex_);
 
   template<class RespClass>
   CHECKED_STATUS RemoveAllPermissionsForResource(const std::string& canonical_resource,
                                                  RespClass* resp);
 
-  CHECKED_STATUS PrepareDefaultRoles(int64_t term) REQUIRES_SHARED(catalog_manager_->mutex_);
+  CHECKED_STATUS PrepareDefaultRoles(int64_t term);
 
   void GetAllRoles(std::vector<scoped_refptr<RoleInfo>>* roles);
 
@@ -163,6 +165,9 @@ class PermissionsManager final {
   // Permissions cache. Kept in a protobuf to avoid rebuilding it every time we receive a request
   // from a client.
   std::shared_ptr<GetPermissionsResponsePB> permissions_cache_;
+  using MutexType = rw_spinlock;
+  mutable MutexType mutex_;
+
 
   // Cluster security config.
   scoped_refptr<SysConfigInfo> security_config_ = nullptr;

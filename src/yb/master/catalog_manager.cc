@@ -872,127 +872,128 @@ Status CatalogManager::VisitSysCatalog(int64_t term) {
     LOG_WITH_PREFIX(WARNING) << "Long wait on leader_lock_: " << yb::ToString(finish - start);
   }
 
-  LOG_WITH_PREFIX(INFO)
-      << __func__ << ": Acquire catalog manager lock_ before loading sys catalog.";
-  LockGuard lock(mutex_);
-  VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+  {
+    LOG_WITH_PREFIX(INFO)
+        << __func__ << ": Acquire catalog manager lock_ before loading sys catalog.";
+    LockGuard lock(mutex_);
+    VLOG_WITH_FUNC(3) << "Acquired the lock";
 
-  // Abort any outstanding tasks. All TableInfos are orphaned below, so
-  // it's important to end their tasks now; otherwise Shutdown() will
-  // destroy master state used by these tasks.
-  std::vector<scoped_refptr<TableInfo>> tables;
-  AppendValuesFromMap(*table_ids_map_, &tables);
-  AbortAndWaitForAllTasks(tables);
+    // Abort any outstanding tasks. All TableInfos are orphaned below, so
+    // it's important to end their tasks now; otherwise Shutdown() will
+    // destroy master state used by these tasks.
+    std::vector<scoped_refptr<TableInfo>> tables;
+    AppendValuesFromMap(*table_ids_map_, &tables);
+    AbortAndWaitForAllTasks(tables);
 
-  // Clear internal maps and run data loaders.
-  RETURN_NOT_OK(RunLoaders(term));
+    // Clear internal maps and run data loaders.
+    RETURN_NOT_OK(RunLoaders(term));
 
-  // Prepare various default system configurations.
-  RETURN_NOT_OK(PrepareDefaultSysConfig(term));
+    // Prepare various default system configurations.
+    RETURN_NOT_OK(PrepareDefaultSysConfig(term));
 
-  if ((FLAGS_use_initial_sys_catalog_snapshot || FLAGS_enable_ysql) &&
-      !FLAGS_initial_sys_catalog_snapshot_path.empty() &&
-      !FLAGS_create_initial_sys_catalog_snapshot) {
-    if (!namespace_ids_map_.empty() || !system_tablets_.empty()) {
-      LOG_WITH_PREFIX(INFO)
-          << "This is an existing cluster, not initializing from a sys catalog snapshot.";
-    } else {
-      Result<bool> dir_exists =
-          Env::Default()->DoesDirectoryExist(FLAGS_initial_sys_catalog_snapshot_path);
-      if (dir_exists.ok() && *dir_exists) {
-        bool initdb_was_already_done = false;
-        {
-          auto l = ysql_catalog_config_->LockForRead();
-          initdb_was_already_done = l->pb.ysql_catalog_config().initdb_done();
-        }
-        if (initdb_was_already_done) {
-          LOG_WITH_PREFIX(INFO)
-              << "initdb has been run before, no need to restore sys catalog from "
-              << "the initial snapshot";
-        } else {
-          LOG_WITH_PREFIX(INFO) << "Restoring snapshot in sys catalog";
-          Status restore_status = RestoreInitialSysCatalogSnapshot(
-              FLAGS_initial_sys_catalog_snapshot_path,
-              sys_catalog_->tablet_peer().get(),
-              term);
-          if (!restore_status.ok()) {
-            LOG_WITH_PREFIX(ERROR) << "Failed restoring snapshot in sys catalog";
-            return restore_status;
-          }
-
-          LOG_WITH_PREFIX(INFO) << "Re-initializing cluster config";
-          cluster_config_.reset();
-          RETURN_NOT_OK(PrepareDefaultClusterConfig(term));
-
-          LOG_WITH_PREFIX(INFO) << "Restoring snapshot completed, considering initdb finished";
-          RETURN_NOT_OK(InitDbFinished(Status::OK(), term));
-          RETURN_NOT_OK(RunLoaders(term));
-        }
+    if ((FLAGS_use_initial_sys_catalog_snapshot || FLAGS_enable_ysql) &&
+        !FLAGS_initial_sys_catalog_snapshot_path.empty() &&
+        !FLAGS_create_initial_sys_catalog_snapshot) {
+      if (!namespace_ids_map_.empty() || !system_tablets_.empty()) {
+        LOG_WITH_PREFIX(INFO)
+            << "This is an existing cluster, not initializing from a sys catalog snapshot.";
       } else {
-        LOG_WITH_PREFIX(WARNING)
-            << "Initial sys catalog snapshot directory does not exist: "
-            << FLAGS_initial_sys_catalog_snapshot_path
-            << (dir_exists.ok() ? "" : ", status: " + dir_exists.status().ToString());
+        Result<bool> dir_exists =
+            Env::Default()->DoesDirectoryExist(FLAGS_initial_sys_catalog_snapshot_path);
+        if (dir_exists.ok() && *dir_exists) {
+          bool initdb_was_already_done = false;
+          {
+            auto l = ysql_catalog_config_->LockForRead();
+            initdb_was_already_done = l->pb.ysql_catalog_config().initdb_done();
+          }
+          if (initdb_was_already_done) {
+            LOG_WITH_PREFIX(INFO)
+                << "initdb has been run before, no need to restore sys catalog from "
+                << "the initial snapshot";
+          } else {
+            LOG_WITH_PREFIX(INFO) << "Restoring snapshot in sys catalog";
+            Status restore_status = RestoreInitialSysCatalogSnapshot(
+                FLAGS_initial_sys_catalog_snapshot_path,
+                sys_catalog_->tablet_peer().get(),
+                term);
+            if (!restore_status.ok()) {
+              LOG_WITH_PREFIX(ERROR) << "Failed restoring snapshot in sys catalog";
+              return restore_status;
+            }
+
+            LOG_WITH_PREFIX(INFO) << "Re-initializing cluster config";
+            cluster_config_.reset();
+            RETURN_NOT_OK(PrepareDefaultClusterConfig(term));
+
+            LOG_WITH_PREFIX(INFO) << "Restoring snapshot completed, considering initdb finished";
+            RETURN_NOT_OK(InitDbFinished(Status::OK(), term));
+            RETURN_NOT_OK(RunLoaders(term));
+          }
+        } else {
+          LOG_WITH_PREFIX(WARNING)
+              << "Initial sys catalog snapshot directory does not exist: "
+              << FLAGS_initial_sys_catalog_snapshot_path
+              << (dir_exists.ok() ? "" : ", status: " + dir_exists.status().ToString());
+        }
       }
     }
-  }
 
-  // Create the system namespaces (created only if they don't already exist).
-  RETURN_NOT_OK(PrepareDefaultNamespaces(term));
+    // Create the system namespaces (created only if they don't already exist).
+    RETURN_NOT_OK(PrepareDefaultNamespaces(term));
 
-  // Create the system tables (created only if they don't already exist).
-  RETURN_NOT_OK(PrepareSystemTables(term));
+    // Create the system tables (created only if they don't already exist).
+    RETURN_NOT_OK(PrepareSystemTables(term));
 
-  // Create the default cassandra (created only if they don't already exist).
-  RETURN_NOT_OK(permissions_manager_->PrepareDefaultRoles(term));
+    // If this is the first time we start up, we have no config information as default. We write an
+    // empty version 0.
+    RETURN_NOT_OK(PrepareDefaultClusterConfig(term));
 
-  // If this is the first time we start up, we have no config information as default. We write an
-  // empty version 0.
-  RETURN_NOT_OK(PrepareDefaultClusterConfig(term));
-
-  permissions_manager_->BuildRecursiveRolesUnlocked();
-
-  if (FLAGS_enable_ysql) {
-    // Number of TS to wait for before creating the txn table.
-    auto wait_ts_count = std::max(FLAGS_txn_table_wait_min_ts_count, FLAGS_replication_factor);
-
-    LOG_WITH_PREFIX(INFO)
-        << "YSQL is enabled, will create the transaction status table when "
-        << wait_ts_count << " tablet servers are online";
-    master_->ts_manager()->SetTSCountCallback(wait_ts_count, [this, wait_ts_count] {
+    if (FLAGS_enable_ysql) {
+      // Number of TS to wait for before creating the txn table.
+      auto wait_ts_count = std::max(FLAGS_txn_table_wait_min_ts_count, FLAGS_replication_factor);
+ 
       LOG_WITH_PREFIX(INFO)
-          << wait_ts_count
-          << " tablet servers registered, creating the transaction status table";
-      // Retry table creation until it succeedes. It might fail initially because placement UUID
-      // of live replicas is set through an RPC from YugaWare, and we won't be able to calculate
-      // the number of primary (non-read-replica) tablet servers until that happens.
-      while (true) {
-        const auto s = CreateTransactionsStatusTableIfNeeded(/* rpc */ nullptr);
-        if (s.ok()) {
-          break;
+          << "YSQL is enabled, will create the transaction status table when "
+          << wait_ts_count << " tablet servers are online";
+      master_->ts_manager()->SetTSCountCallback(wait_ts_count, [this, wait_ts_count] {
+        LOG_WITH_PREFIX(INFO)
+            << wait_ts_count
+            << " tablet servers registered, creating the transaction status table";
+        // Retry table creation until it succeedes. It might fail initially because placement UUID
+        // of live replicas is set through an RPC from YugaWare, and we won't be able to calculate
+        // the number of primary (non-read-replica) tablet servers until that happens.
+        while (true) {
+          const auto s = CreateTransactionsStatusTableIfNeeded(/* rpc */ nullptr);
+          if (s.ok()) {
+            break;
+          }
+          LOG_WITH_PREFIX(WARNING) << "Failed creating transaction status table, waiting: " << s;
+          if (s.IsShutdownInProgress()) {
+            return;
+          }
+          auto role = Role();
+          if (role != RaftPeerPB::LEADER) {
+            LOG_WITH_PREFIX(WARNING)
+                << "Cancel creating transaction because of role: " << RaftPeerPB::Role_Name(role);
+            return;
+          }
+          SleepFor(MonoDelta::FromSeconds(1));
         }
-        LOG_WITH_PREFIX(WARNING) << "Failed creating transaction status table, waiting: " << s;
-        if (s.IsShutdownInProgress()) {
-          return;
-        }
-        auto role = Role();
-        if (role != RaftPeerPB::LEADER) {
-          LOG_WITH_PREFIX(WARNING)
-              << "Cancel creating transaction because of role: " << RaftPeerPB::Role_Name(role);
-          return;
-        }
-        SleepFor(MonoDelta::FromSeconds(1));
-      }
-      LOG_WITH_PREFIX(INFO) << "Finished creating transaction status table asynchronously";
-    });
-  }
+        LOG_WITH_PREFIX(INFO) << "Finished creating transaction status table asynchronously";
+      });
+    }
 
-  if (!StartRunningInitDbIfNeeded(term)) {
-    // If we are not running initdb, this is an existing cluster, and we need to check whether we
-    // need to do a one-time migration to make YSQL system catalog tables transactional.
-    RETURN_NOT_OK(MakeYsqlSysCatalogTablesTransactional(
-        table_ids_map_.CheckOut().get_ptr(), sys_catalog_.get(), ysql_catalog_config_.get(), term));
+    if (!StartRunningInitDbIfNeeded(term)) {
+      // If we are not running initdb, this is an existing cluster, and we need to check whether we
+      // need to do a one-time migration to make YSQL system catalog tables transactional.
+      RETURN_NOT_OK(MakeYsqlSysCatalogTablesTransactional(
+          table_ids_map_.CheckOut().get_ptr(),
+          sys_catalog_.get(),
+          ysql_catalog_config_.get(),
+          term));
+    }
   }
+  RETURN_NOT_OK(permissions_manager_->PrepareDefaultAndBuildRecursiveRoles(term));
 
   return Status::OK();
 }
@@ -4763,7 +4764,7 @@ Status CatalogManager::AlterTable(const AlterTableRequestPB* req,
     // Postgres handles name uniqueness constraints in it's own layer.
     if (l->table_type() != PGSQL_TABLE_TYPE) {
       LockGuard lock(mutex_);
-      VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+      VLOG_WITH_FUNC(3) << "Acquired the lock";
 
       TRACE("Acquired catalog manager lock");
 
@@ -4873,7 +4874,7 @@ Status CatalogManager::AlterTable(const AlterTableRequestPB* req,
     if (table->GetTableType() != PGSQL_TABLE_TYPE &&
         (req->has_new_namespace() || req->has_new_table_name())) {
       LockGuard lock(mutex_);
-      VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+      VLOG_WITH_FUNC(3) << "Acquired the lock";
       CHECK_EQ(table_names_map_.erase({new_namespace_id, new_table_name}), 1);
     }
     // TableMetadaLock follows RAII paradigm: when it leaves scope,
@@ -6524,7 +6525,7 @@ Status CatalogManager::DeleteNamespace(const DeleteNamespaceRequestPB* req,
   TRACE("Looking for tables in the keyspace");
   {
     SharedLock lock(mutex_);
-    VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+    VLOG_WITH_FUNC(3) << "Acquired the lock";
 
     for (const TableInfoMap::value_type& entry : *table_ids_map_) {
       auto ltm = entry.second->LockForRead();
@@ -6598,7 +6599,7 @@ void CatalogManager::DeleteYcqlDatabaseAsync(scoped_refptr<NamespaceInfo> databa
   TRACE("Looking for tables in the keyspace");
   {
     SharedLock lock(mutex_);
-    VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+    VLOG_WITH_FUNC(3) << "Acquired the lock";
 
     for (const TableInfoMap::value_type& entry : *table_ids_map_) {
       auto ltm = entry.second->LockForRead();
@@ -6615,7 +6616,7 @@ void CatalogManager::DeleteYcqlDatabaseAsync(scoped_refptr<NamespaceInfo> databa
   TRACE("Looking for types in the keyspace");
   {
     SharedLock lock(mutex_);
-    VLOG_WITH_FUNC(3) << "Acquired the catalog manager lock";
+    VLOG_WITH_FUNC(3) << "Acquired the lock";
 
     for (const UDTypeInfoMap::value_type& entry : udtype_ids_map_) {
       auto ltm = entry.second->LockForRead();

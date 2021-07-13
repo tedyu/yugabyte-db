@@ -108,7 +108,7 @@ Status PermissionsManager::GrantPermissions(
     const std::vector<PermissionType>& permissions,
     const ResourceType resource_type,
     RespClass* resp) {
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
 
   scoped_refptr<RoleInfo> rp;
   rp = FindPtrOrNull(roles_map_, role_name);
@@ -234,7 +234,7 @@ template<class RespClass>
 Status PermissionsManager::RemoveAllPermissionsForResource(
     const std::string& canonical_resource,
     RespClass* resp) {
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
   return RemoveAllPermissionsForResourceUnlocked(canonical_resource, resp);
 }
 
@@ -248,6 +248,15 @@ template
 Status PermissionsManager::RemoveAllPermissionsForResource<DeleteNamespaceResponsePB>(
     const std::string& canonical_resource,
     DeleteNamespaceResponsePB* resp);
+
+Status PermissionsManager::PrepareDefaultAndBuildRecursiveRoles(int64_t term) {
+  CatalogManager::LockGuard lock(mutex_);
+
+  // Create the default cassandra (created only if they don't already exist).
+  RETURN_NOT_OK(PrepareDefaultRoles(term));
+  BuildRecursiveRolesUnlocked();
+  return Status::OK();
+}
 
 Status PermissionsManager::CreateRoleUnlocked(
     const std::string& role_name,
@@ -300,7 +309,7 @@ Status PermissionsManager::CreateRole(
   Status s;
   {
     TRACE("Acquired catalog manager lock");
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    CatalogManager::LockGuard lock(mutex_);
     // Only a SUPERUSER role can create another SUPERUSER role. In Apache Cassandra this gets
     // checked before the existence of the new role.
     if (req->superuser()) {
@@ -349,7 +358,7 @@ Status PermissionsManager::AlterRole(
   Status s;
 
   TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
 
   auto role = FindPtrOrNull(roles_map_, req->name());
   if (role == nullptr) {
@@ -431,7 +440,7 @@ Status PermissionsManager::DeleteRole(
   }
 
   TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
 
   auto role = FindPtrOrNull(roles_map_, req->name());
   if (role == nullptr) {
@@ -554,7 +563,7 @@ Status PermissionsManager::GrantRevokeRole(
   {
     constexpr char role_not_found_msg_str[] = "$0 doesn't exist";
     TRACE("Acquired catalog manager lock");
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    CatalogManager::LockGuard lock(mutex_);
 
     scoped_refptr<RoleInfo> granted_role;
     granted_role = FindPtrOrNull(roles_map_, req->granted_role());
@@ -742,7 +751,7 @@ Status PermissionsManager::GetPermissions(
     rpc::RpcContext* rpc) {
   std::shared_ptr<GetPermissionsResponsePB> permissions_cache;
   {
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    CatalogManager::LockGuard lock(mutex_);
     if (!permissions_cache_) {
       BuildRecursiveRolesUnlocked();
       if (!permissions_cache_) {
@@ -799,7 +808,7 @@ Status PermissionsManager::GrantRevokePermission(
   LOG(INFO) << (req->revoke() ? "Revoke" : "Grant") << " permission "
             << RequestorString(rpc) << ": " << req->ShortDebugString();
 
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
   TRACE("Acquired catalog manager lock");
   Status s;
   scoped_refptr<TableInfo> table;
@@ -950,7 +959,7 @@ Status PermissionsManager::GrantRevokePermission(
 
 void PermissionsManager::GetAllRoles(std::vector<scoped_refptr<RoleInfo>>* roles) {
   roles->clear();
-  CatalogManager::SharedLock lock(catalog_manager_->mutex_);
+  CatalogManager::SharedLock lock(mutex_);
   for (const RoleInfoMap::value_type& e : roles_map_) {
     roles->push_back(e.second);
   }
@@ -974,7 +983,7 @@ vector<string> PermissionsManager::DirectMemberOf(const RoleName& role) {
 
 void PermissionsManager::BuildRecursiveRoles() {
   TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  CatalogManager::LockGuard lock(mutex_);
   BuildRecursiveRolesUnlocked();
 }
 
