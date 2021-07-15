@@ -868,6 +868,9 @@ class CatalogManager :
   // to true (under state_lock_).
   void LoadSysCatalogDataTask();
 
+  CHECKED_STATUS CheckResource(const GrantRevokePermissionRequestPB* req,
+                               GrantRevokePermissionResponsePB* resp);
+
   // Generated the default entry for the cluster config, that is written into sys_catalog on very
   // first leader election of the cluster.
   //

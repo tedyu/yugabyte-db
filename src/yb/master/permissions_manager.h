@@ -65,7 +65,7 @@ class PermissionsManager final {
       int64_t term,
       // This value is only set to false during the creation of the
       // default role when it doesn't exist.
-      const bool increment_roles_version = true) REQUIRES_SHARED(catalog_manager_->mutex_);
+      const bool increment_roles_version = true) REQUIRES_SHARED(mutex_);
 
   // Grant one role to another role.
   CHECKED_STATUS GrantRevokeRole(const GrantRevokeRoleRequestPB* req,
@@ -75,18 +75,18 @@ class PermissionsManager final {
     // Grant/Revoke a permission to a role.
   CHECKED_STATUS GrantRevokePermission(const GrantRevokePermissionRequestPB* req,
                                        GrantRevokePermissionResponsePB* resp,
-                                       rpc::RpcContext* rpc);
+                                       rpc::RpcContext* rpc) EXCLUDES(catalog_manager_->mutex_);
 
   // Get all the permissions granted to resources.
   CHECKED_STATUS GetPermissions(const GetPermissionsRequestPB* req,
                                 GetPermissionsResponsePB* resp,
                                 rpc::RpcContext* rpc);
 
-  void BuildResourcePermissionsUnlocked();
+  void BuildResourcePermissionsUnlocked() REQUIRES_SHARED(mutex_);
 
   // Increment the version stored in roles_version_ if it exists. Otherwise, creates a
   // SysVersionInfo object with version equal to 0 to track the roles versions.
-  CHECKED_STATUS IncrementRolesVersionUnlocked() REQUIRES_SHARED(catalog_manager_->mutex_);
+  CHECKED_STATUS IncrementRolesVersionUnlocked() REQUIRES_SHARED(mutex_);
 
   // Grant the specified permissions.
   template<class RespClass>
@@ -106,32 +106,33 @@ class PermissionsManager final {
   template<class RespClass>
   CHECKED_STATUS RemoveAllPermissionsForResourceUnlocked(
       const std::string& canonical_resource, RespClass* resp)
-      REQUIRES_SHARED(catalog_manager_->mutex_);
+      REQUIRES_SHARED(mutex_);
 
   template<class RespClass>
   CHECKED_STATUS RemoveAllPermissionsForResource(const std::string& canonical_resource,
                                                  RespClass* resp);
 
-  CHECKED_STATUS PrepareDefaultRoles(int64_t term) REQUIRES_SHARED(catalog_manager_->mutex_);
+  CHECKED_STATUS PrepareDefaultRoles(int64_t term);
 
   void GetAllRoles(std::vector<scoped_refptr<RoleInfo>>* roles);
 
   // Find all the roles for which 'role' is a member of the list 'member_of'.
-  std::vector<std::string> DirectMemberOf(const RoleName& role);
+  std::vector<std::string> DirectMemberOf(const RoleName& role) REQUIRES_SHARED(mutex_);
 
-  void TraverseRole(const string& role_name, std::unordered_set<RoleName>* granted_roles);
+  void TraverseRole(const string& role_name, std::unordered_set<RoleName>* granted_roles)
+  REQUIRES_SHARED(mutex_);
 
   // Build the recursive map of roles (recursive_granted_roles_). If r1 is granted to r2, and r2
   // is granted to r3, then recursive_granted_roles_["r3"] will contain roles r2, and r1.
   void BuildRecursiveRoles();
 
-  void BuildRecursiveRolesUnlocked();
+  void BuildRecursiveRolesUnlocked() REQUIRES_SHARED(mutex_);
 
-  bool IsMemberOf(const RoleName& granted_role, const RoleName& role);
+  bool IsMemberOf(const RoleName& granted_role, const RoleName& role) REQUIRES_SHARED(mutex_);
 
-  void AddRoleUnlocked(const RoleName& role_name, scoped_refptr<RoleInfo> role_info);
-  bool DoesRoleExistUnlocked(const RoleName& role_name);
-  void ClearRolesUnlocked();
+  void AddRole(const RoleName& role_name, scoped_refptr<RoleInfo> role_info) EXCLUDES(mutex_);
+  bool DoesRoleExist(const RoleName& role_name) EXCLUDES(mutex_);
+  void ClearRoles() EXCLUDES(mutex_);
 
   // This is invoked from PrepareDefaultSysConfig in catalog manger and sets up the default state of
   // of cluster security config.
@@ -143,7 +144,7 @@ class PermissionsManager final {
  private:
   // Role map: RoleName -> RoleInfo
   typedef std::unordered_map<RoleName, scoped_refptr<RoleInfo> > RoleInfoMap;
-  RoleInfoMap roles_map_;
+  RoleInfoMap roles_map_ GUARDED_BY(mutex_);
 
   typedef std::unordered_map<RoleName, std::unordered_set<RoleName>> RoleMemberMap;
 
@@ -156,13 +157,17 @@ class PermissionsManager final {
   typedef std::unordered_map<RoleName, ResourcePermissionsMap> RolePermissionsMap;
 
   // role_name -> set of granted roles (including those acquired transitively).
-  RoleMemberMap recursive_granted_roles_;
+  RoleMemberMap recursive_granted_roles_ GUARDED_BY(mutex_);
 
-  RolePermissionsMap recursive_granted_permissions_;
+  RolePermissionsMap recursive_granted_permissions_ GUARDED_BY(mutex_);
 
   // Permissions cache. Kept in a protobuf to avoid rebuilding it every time we receive a request
   // from a client.
   std::shared_ptr<GetPermissionsResponsePB> permissions_cache_;
+  using MutexType = rw_spinlock;
+  mutable MutexType mutex_ ACQUIRED_AFTER(catalog_manager_->mutex_);
+  using SharedLock = NonRecursiveSharedLock<MutexType>;
+  using LockGuard = std::lock_guard<MutexType>;
 
   // Cluster security config.
   scoped_refptr<SysConfigInfo> security_config_ = nullptr;

@@ -76,6 +76,7 @@ PermissionsManager::PermissionsManager(CatalogManager* catalog_manager)
 }
 
 Status PermissionsManager::PrepareDefaultRoles(int64_t term) {
+  LockGuard lock(mutex_);
   if (FindPtrOrNull(roles_map_, kDefaultCassandraUsername) != nullptr) {
     LOG(INFO) << "Role " << kDefaultCassandraUsername
               << " already created, skipping initialization";
@@ -108,7 +109,7 @@ Status PermissionsManager::GrantPermissions(
     const std::vector<PermissionType>& permissions,
     const ResourceType resource_type,
     RespClass* resp) {
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  LockGuard lock(mutex_);
 
   scoped_refptr<RoleInfo> rp;
   rp = FindPtrOrNull(roles_map_, role_name);
@@ -234,7 +235,7 @@ template<class RespClass>
 Status PermissionsManager::RemoveAllPermissionsForResource(
     const std::string& canonical_resource,
     RespClass* resp) {
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  LockGuard lock(mutex_);
   return RemoveAllPermissionsForResourceUnlocked(canonical_resource, resp);
 }
 
@@ -299,8 +300,8 @@ Status PermissionsManager::CreateRole(
 
   Status s;
   {
-    TRACE("Acquired catalog manager lock");
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    TRACE("Acquired lock");
+    LockGuard lock(mutex_);
     // Only a SUPERUSER role can create another SUPERUSER role. In Apache Cassandra this gets
     // checked before the existence of the new role.
     if (req->superuser()) {
@@ -348,8 +349,8 @@ Status PermissionsManager::AlterRole(
 
   Status s;
 
-  TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  TRACE("Acquired lock");
+  LockGuard lock(mutex_);
 
   auto role = FindPtrOrNull(roles_map_, req->name());
   if (role == nullptr) {
@@ -430,8 +431,8 @@ Status PermissionsManager::DeleteRole(
     return SetupError(resp->mutable_error(), MasterErrorPB::ROLE_NOT_FOUND, s);
   }
 
-  TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  TRACE("Acquired lock");
+  LockGuard lock(mutex_);
 
   auto role = FindPtrOrNull(roles_map_, req->name());
   if (role == nullptr) {
@@ -553,8 +554,8 @@ Status PermissionsManager::GrantRevokeRole(
 
   {
     constexpr char role_not_found_msg_str[] = "$0 doesn't exist";
-    TRACE("Acquired catalog manager lock");
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    TRACE("Acquired lock");
+    LockGuard lock(mutex_);
 
     scoped_refptr<RoleInfo> granted_role;
     granted_role = FindPtrOrNull(roles_map_, req->granted_role());
@@ -742,7 +743,7 @@ Status PermissionsManager::GetPermissions(
     rpc::RpcContext* rpc) {
   std::shared_ptr<GetPermissionsResponsePB> permissions_cache;
   {
-    CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+    LockGuard lock(mutex_);
     if (!permissions_cache_) {
       BuildRecursiveRolesUnlocked();
       if (!permissions_cache_) {
@@ -798,42 +799,11 @@ Status PermissionsManager::GrantRevokePermission(
     rpc::RpcContext* rpc) {
   LOG(INFO) << (req->revoke() ? "Revoke" : "Grant") << " permission "
             << RequestorString(rpc) << ": " << req->ShortDebugString();
+  RETURN_NOT_OK(catalog_manager_->CheckResource(req, resp));
 
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
-  TRACE("Acquired catalog manager lock");
+  LockGuard lock(mutex_);
+  TRACE("Acquired lock");
   Status s;
-  scoped_refptr<TableInfo> table;
-
-  // Checking if resources exist.
-  if (req->resource_type() == ResourceType::TABLE ||
-      req->resource_type() == ResourceType::KEYSPACE) {
-    // We can't match Apache Cassandra's error because when a namespace is not provided, the error
-    // is detected by the semantic analysis in PTQualifiedName::AnalyzeName.
-    DCHECK(req->has_namespace_());
-    const auto& namespace_info = req->namespace_();
-    auto ns = catalog_manager_->FindNamespaceUnlocked(namespace_info);
-
-    if (req->resource_type() == ResourceType::KEYSPACE) {
-      if (!ns.ok()) {
-        // Matches Apache Cassandra's error.
-        s = STATUS_SUBSTITUTE(
-            NotFound, "Resource <keyspace $0> doesn't exist", namespace_info.name());
-        return SetupError(resp->mutable_error(), MasterErrorPB::NAMESPACE_NOT_FOUND, s);
-      }
-    } else {
-      if (ns.ok()) {
-        table = FindPtrOrNull(
-            catalog_manager_->table_names_map_, {(**ns).id(), req->resource_name()});
-      }
-      if (table == nullptr) {
-        // Matches Apache Cassandra's error.
-        s = STATUS_SUBSTITUTE(
-            NotFound, "Resource <object '$0.$1'> doesn't exist",
-            namespace_info.name(), req->resource_name());
-        return SetupError(resp->mutable_error(), MasterErrorPB::OBJECT_NOT_FOUND, s);
-      }
-    }
-  }
 
   if (req->resource_type() == ResourceType::ROLE) {
     scoped_refptr<RoleInfo> role;
@@ -950,7 +920,7 @@ Status PermissionsManager::GrantRevokePermission(
 
 void PermissionsManager::GetAllRoles(std::vector<scoped_refptr<RoleInfo>>* roles) {
   roles->clear();
-  CatalogManager::SharedLock lock(catalog_manager_->mutex_);
+  SharedLock lock(mutex_);
   for (const RoleInfoMap::value_type& e : roles_map_) {
     roles->push_back(e.second);
   }
@@ -973,8 +943,8 @@ vector<string> PermissionsManager::DirectMemberOf(const RoleName& role) {
 }
 
 void PermissionsManager::BuildRecursiveRoles() {
-  TRACE("Acquired catalog manager lock");
-  CatalogManager::LockGuard lock(catalog_manager_->mutex_);
+  TRACE("Acquired lock");
+  LockGuard lock(mutex_);
   BuildRecursiveRolesUnlocked();
 }
 
@@ -1008,17 +978,20 @@ void PermissionsManager::TraverseRole(
   }
 }
 
-void PermissionsManager::AddRoleUnlocked(
+void PermissionsManager::AddRole(
     const RoleName& role_name,
     scoped_refptr<RoleInfo> role_info) {
+  LockGuard lock(mutex_);
   roles_map_[role_name] = std::move(role_info);
 }
 
-bool PermissionsManager::DoesRoleExistUnlocked(const RoleName& role_name) {
+bool PermissionsManager::DoesRoleExist(const RoleName& role_name) {
+  SharedLock l(mutex_);
   return roles_map_.count(role_name);
 }
 
-void PermissionsManager::ClearRolesUnlocked() {
+void PermissionsManager::ClearRoles() {
+  LockGuard lock(mutex_);
   roles_map_.clear();
 }
 

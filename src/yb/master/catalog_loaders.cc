@@ -426,14 +426,14 @@ Status RedisConfigLoader::Visit(const std::string& key, const SysRedisConfigEntr
 ////////////////////////////////////////////////////////////
 
 Status RoleLoader::Visit(const RoleName& role_name, const SysRoleEntryPB& metadata) {
-  CHECK(!catalog_manager_->permissions_manager()->DoesRoleExistUnlocked(role_name))
+  CHECK(!catalog_manager_->permissions_manager()->DoesRoleExist(role_name))
     << "Role already exists: " << role_name;
 
   RoleInfo* const role = new RoleInfo(role_name);
   {
     auto l = role->LockForWrite();
     l.mutable_data()->pb.CopyFrom(metadata);
-    catalog_manager_->permissions_manager()->AddRoleUnlocked(
+    catalog_manager_->permissions_manager()->AddRole(
         role_name, make_scoped_refptr<RoleInfo>(role));
 
     l.Commit();
